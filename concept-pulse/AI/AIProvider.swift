@@ -46,10 +46,10 @@ enum TriageUrgency {
 // MARK: - Factory
 
 enum AIProviderFactory {
-    /// Returns MockAIProvider until real API keys are available.
-    /// To switch: return OpenAIProvider() or ClaudeProvider() here.
+    /// OpenAIProvider routes all calls through the Supabase Edge Function.
+    /// Fall back to MockAIProvider() locally if the Edge Function is unavailable.
     static func make() -> AIProviderProtocol {
-        return MockAIProvider()
+        return OpenAIProvider()
     }
 }
 

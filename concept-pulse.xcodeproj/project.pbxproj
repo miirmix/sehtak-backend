@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0B0B1A197231E1D036851654 /* OpenAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58F75A2229B2B162BDFF7D02 /* OpenAIProvider.swift */; };
 		0EA7FA6E73661C70CD7CAD41 /* AIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A9C56F4B25266F466D3185D /* AIProvider.swift */; };
 		1744A95F5EE05498D20230E8 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = C00D65F993173C2CC6E26A18 /* LaunchScreen.storyboard */; };
 		17CEE77B557FD959FBC35487 /* DoctorProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DF868C2A9A63E8772B87DC7 /* DoctorProfileView.swift */; };
@@ -24,6 +25,7 @@
 		6EE54F86A730E31C19851D47 /* MockAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCB6FE976AEE229AF1B05CCC /* MockAIProvider.swift */; };
 		8DA2C6CD9290D566AE52D903 /* AIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBA6306325771792A25B0B96 /* AIModels.swift */; };
 		95C343515BA926A53A0D2EF3 /* ExtendedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF3C6D22C2102710F8A8FEF4 /* ExtendedModels.swift */; };
+		A74F86537B0439611B5A6AC5 /* SupabaseConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24200AB8549D911BB7812F52 /* SupabaseConfig.swift */; };
 		AAA14A19BE2AC33B9C2761B3 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7619F3EE36C9E8B035451D /* Models.swift */; };
 		C9344BFA33D782CDDB360153 /* ChatComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AE5A3FEAFE6B2D9E1AD843B /* ChatComponents.swift */; };
 		CE4F52F8F924100829B7951A /* SehatyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A6038897DEF0DB8773C3D38 /* SehatyApp.swift */; };
@@ -34,9 +36,11 @@
 
 /* Begin PBXFileReference section */
 		1DE0162AD119F0AE8BB7C70D /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		24200AB8549D911BB7812F52 /* SupabaseConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseConfig.swift; sourceTree = "<group>"; };
 		2F4BA4144C89CE7B5C7D0266 /* concept-pulse.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "concept-pulse.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AE5A3FEAFE6B2D9E1AD843B /* ChatComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatComponents.swift; sourceTree = "<group>"; };
 		3DF868C2A9A63E8772B87DC7 /* DoctorProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorProfileView.swift; sourceTree = "<group>"; };
+		58F75A2229B2B162BDFF7D02 /* OpenAIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIProvider.swift; sourceTree = "<group>"; };
 		7A6038897DEF0DB8773C3D38 /* SehatyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SehatyApp.swift; sourceTree = "<group>"; };
 		7C45C0241F5C4BC32A542C8F /* HomeSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSections.swift; sourceTree = "<group>"; };
 		80D0AD394578CE7BE533BEBE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -66,6 +70,8 @@
 			children = (
 				9A9C56F4B25266F466D3185D /* AIProvider.swift */,
 				BCB6FE976AEE229AF1B05CCC /* MockAIProvider.swift */,
+				58F75A2229B2B162BDFF7D02 /* OpenAIProvider.swift */,
+				24200AB8549D911BB7812F52 /* SupabaseConfig.swift */,
 			);
 			path = AI;
 			sourceTree = "<group>";
@@ -294,11 +300,13 @@
 				E79D1F5A6F0A5B5BBB9DD58A /* MedicalRecordsView.swift in Sources */,
 				6EE54F86A730E31C19851D47 /* MockAIProvider.swift in Sources */,
 				AAA14A19BE2AC33B9C2761B3 /* Models.swift in Sources */,
+				0B0B1A197231E1D036851654 /* OpenAIProvider.swift in Sources */,
 				1F666E194E06CB40FEA3C1C9 /* Placeholders.swift in Sources */,
 				4ECD9E5931C574055D31A3E8 /* ProfileView.swift in Sources */,
 				2B827C4FD5CA10BB9C212884 /* RecordDetailView.swift in Sources */,
 				653C7D3467572BD917007669 /* RootTabView.swift in Sources */,
 				CE4F52F8F924100829B7951A /* SehatyApp.swift in Sources */,
+				A74F86537B0439611B5A6AC5 /* SupabaseConfig.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
