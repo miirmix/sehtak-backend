@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+venv/
+.venv/
+
+# Certificate files — DER/PEM intermediates (bundle IS committed)
+certs/*.cer
+certs/*.crt
+certs/russian_trusted_root_ca.pem
+certs/russian_trusted_sub_ca.pem
+# russian_ca_bundle.pem IS tracked (public root CA, not a secret)

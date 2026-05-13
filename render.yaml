@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: gigachat-proxy
+    env: python
+    buildCommand: "pip install -r requirements.txt && bash certs/download_certs.sh"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    envVars:
+      - key: GIGACHAT_AUTH_KEY
+        sync: false          # Set manually in Render Dashboard → Environment
+      - key: GIGACHAT_SCOPE
+        value: GIGACHAT_API_PERS
