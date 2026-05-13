@@ -283,6 +283,40 @@ class ChatRequest(BaseModel):
     model: str = Field(default="GigaChat")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1024, ge=1, le=4096)
+    language: str = Field(default="ar", pattern="^(ar|ru)$")
+
+
+# -- Language enforcement helpers ----------------------------------------------
+
+_LANG_SYSTEM_MESSAGES = {
+    "ar": (
+        "تعليمات إلزامية: يجب أن تجيب فقط باللغة العربية في هذه المحادثة. "
+        "لا تستخدم الروسية أو الإنجليزية أو أي لغة أخرى مطلقاً. "
+        "حتى لو كان السؤال بلغة أخرى، أجب دائماً بالعربية فقط."
+    ),
+    "ru": (
+        "Обязательная инструкция: отвечай ТОЛЬКО на русском языке в этом диалоге. "
+        "Не используй арабский, английский или любой другой язык. "
+        "Даже если вопрос задан на другом языке — отвечай исключительно по-русски."
+    ),
+}
+
+
+def _enforce_language(messages: list[ChatMessage], language: str) -> list[dict]:
+    """
+    Prepend a strict language-enforcement system message and append a reminder
+    at the end of the user turn to guarantee the model responds in one language only.
+    """
+    lang_instruction = _LANG_SYSTEM_MESSAGES.get(language, _LANG_SYSTEM_MESSAGES["ar"])
+    result: list[dict] = []
+
+    # Insert language enforcement as first system message
+    result.append({"role": "system", "content": lang_instruction})
+
+    for msg in messages:
+        result.append({"role": msg.role, "content": msg.content})
+
+    return result
 
 
 # -- Routes --------------------------------------------------------------------
@@ -414,11 +448,17 @@ async def ai_chat(body: ChatRequest, request: Request):
     """
     Main proxy endpoint -- called by the iOS app.
     Requires no secrets in the mobile app; GIGACHAT_AUTH_KEY lives only here.
+    Enforces single-language responses based on the `language` field (ar/ru).
     """
     if len(body.messages) > 50:
         raise HTTPException(status_code=400, detail="Too many messages")
 
     token = await _get_access_token()
+
+    # Build messages with language enforcement injected
+    enforced_messages = _enforce_language(body.messages, body.language)
+    log.info("ai_chat: language=%s messages_count=%d (with enforcement=%d)",
+             body.language, len(body.messages), len(enforced_messages))
 
     ssl_ctx = _build_ssl()
     async with httpx.AsyncClient(verify=ssl_ctx, timeout=45.0) as client:
@@ -431,7 +471,7 @@ async def ai_chat(body: ChatRequest, request: Request):
             },
             json={
                 "model": body.model,
-                "messages": [m.model_dump() for m in body.messages],
+                "messages": enforced_messages,
                 "temperature": body.temperature,
                 "max_tokens": body.max_tokens,
             },

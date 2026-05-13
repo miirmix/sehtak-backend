@@ -100,7 +100,7 @@ final class GigaChatProvider: AIProviderProtocol {
         ]
 
         do {
-            let reply = try await callChat(messages: messages)
+            let reply = try await callChat(messages: messages, language: language)
             return parseTextReply(reply, query: query, language: language)
         } catch {
             NSLog("[GigaChat] generateMedicalResponse error: \(error.localizedDescription)")
@@ -117,18 +117,30 @@ final class GigaChatProvider: AIProviderProtocol {
             return nonMedicalReject(language: language)
         }
         let base64 = jpeg.base64EncodedString()
-        let lang = language == .arabic ? "Arabic" : "Russian"
-        let prompt = """
-        You are a medical image analyzer. Analyze this medical image. \
-        Determine if it is a medical image (ECG, blood test, prescription, lab report, X-ray, MRI, etc.). \
-        If not medical, respond: {"isMedical":false,"category":"non_medical"}. \
-        If medical, respond JSON: {"isMedical":true,"category":"ecg|blood_test|prescription|lab_report|xray|mri|other","title":"...","summary":"...","findings":["..."],"recommendedSpecialty":"...","disclaimer":"..."}. \
-        Respond in \(lang). Image base64: \(base64.prefix(100))...[truncated]
-        """
+        let prompt: String
+        if language == .arabic {
+            prompt = """
+            أنت محلل صور طبية. حلّل هذه الصورة الطبية. \
+            قرر ما إذا كانت صورة طبية (تخطيط قلب، تحليل دم، وصفة طبية، تقرير مختبر، أشعة، رنين مغناطيسي، إلخ). \
+            إذا لم تكن طبية، أجب: {"isMedical":false,"category":"non_medical"}. \
+            إذا كانت طبية، أجب بـ JSON: {"isMedical":true,"category":"ecg|blood_test|prescription|lab_report|xray|mri|other","title":"...","summary":"...","findings":["..."],"recommendedSpecialty":"...","disclaimer":"..."}. \
+            أجب فقط باللغة العربية. لا تستخدم أي لغة أخرى. \
+            بيانات الصورة base64: \(base64.prefix(100))...[مقتطع]
+            """
+        } else {
+            prompt = """
+            Ты анализатор медицинских снимков. Проанализируй это медицинское изображение. \
+            Определи, является ли оно медицинским (ЭКГ, анализ крови, рецепт, лабораторный отчёт, рентген, МРТ и т.д.). \
+            Если не медицинское, ответь: {"isMedical":false,"category":"non_medical"}. \
+            Если медицинское, ответь JSON: {"isMedical":true,"category":"ecg|blood_test|prescription|lab_report|xray|mri|other","title":"...","summary":"...","findings":["..."],"recommendedSpecialty":"...","disclaimer":"..."}. \
+            Отвечай ТОЛЬКО на русском языке. Не используй другие языки. \
+            base64 данные снимка: \(base64.prefix(100))...[обрезано]
+            """
+        }
 
         do {
             let messages: [[String: String]] = [["role": "user", "content": prompt]]
-            let reply = try await callChat(messages: messages)
+            let reply = try await callChat(messages: messages, language: language)
             return parseImageReply(reply, language: language)
         } catch {
             return nonMedicalReject(language: language)
@@ -150,7 +162,7 @@ final class GigaChatProvider: AIProviderProtocol {
     }
 
     // MARK: - Core HTTP Call
-    private func callChat(messages: [[String: String]]) async throws -> String {
+    private func callChat(messages: [[String: String]], language: AppLanguage = .arabic) async throws -> String {
         guard let url = URL(string: GigaChatConfig.chatEndpoint) else {
             NSLog("[GigaChat] Bad URL: \(GigaChatConfig.chatEndpoint)")
             throw URLError(.badURL)
@@ -164,7 +176,8 @@ final class GigaChatProvider: AIProviderProtocol {
             "messages":    messages,
             "model":       "GigaChat",
             "temperature": 0.7,
-            "max_tokens":  1024
+            "max_tokens":  1024,
+            "language":    language == .arabic ? "ar" : "ru"
         ]
 
         do {
@@ -313,15 +326,31 @@ final class GigaChatProvider: AIProviderProtocol {
 
     // MARK: - Helpers
     private func buildSystemPrompt(language: AppLanguage) -> String {
-        let lang = language == .arabic ? "Arabic" : "Russian"
-        return """
-        You are a professional medical AI assistant. Always respond in \(lang). \
-        Analyze symptoms, suggest the appropriate medical specialty, and assess urgency level. \
-        Always recommend consulting a real doctor. \
-        Format: JSON with keys: responseText, specialtyKey, specialtyDisplay, urgency (routine/urgent/emergency), \
-        isEmergency (bool), disclaimer. \
-        CRITICAL: for life-threatening symptoms set isEmergency=true.
-        """
+        if language == .arabic {
+            return """
+            أنت مساعد طبي ذكاء اصطناعي متخصص. يجب أن تجيب فقط باللغة العربية دون استثناء. \
+            لا تستخدم أي كلمة روسية أو إنجليزية أو أي لغة أخرى في ردودك. \
+            حتى لو كتب المستخدم بلغة أخرى، أجب دائماً باللغة العربية فقط. \
+            حلل الأعراض، واقترح التخصص الطبي المناسب، وقيّم مستوى الإلحاح. \
+            أوصِ دائماً بمراجعة طبيب حقيقي. \
+            أجب بصيغة JSON فقط بالمفاتيح التالية: responseText (بالعربية), specialtyKey (بالعربية), \
+            specialtyDisplay (بالعربية), urgency (routine/urgent/emergency), \
+            isEmergency (bool), disclaimer (بالعربية). \
+            تنبيه حرج: إذا كانت الأعراض تهدد الحياة اضبط isEmergency=true.
+            """
+        } else {
+            return """
+            Ты профессиональный медицинский ИИ-ассистент. Отвечай ТОЛЬКО на русском языке без исключений. \
+            Не используй ни одного арабского, английского или иного слова в ответах. \
+            Даже если пользователь пишет на другом языке — отвечай исключительно по-русски. \
+            Анализируй симптомы, предлагай подходящую медицинскую специальность, оценивай срочность. \
+            Всегда рекомендуй обратиться к реальному врачу. \
+            Отвечай строго в формате JSON с ключами: responseText (на русском), specialtyKey (на русском), \
+            specialtyDisplay (на русском), urgency (routine/urgent/emergency), \
+            isEmergency (bool), disclaimer (на русском). \
+            КРИТИЧНО: если симптомы угрожают жизни — установи isEmergency=true.
+            """
+        }
     }
 
     private func matchDoctors(specialtyKey: String?) -> [DoctorDetail] {
