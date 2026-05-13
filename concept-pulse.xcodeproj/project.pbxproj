@@ -15,6 +15,7 @@
 		2B827C4FD5CA10BB9C212884 /* RecordDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9225368FA9D29214E3C0D7AE /* RecordDetailView.swift */; };
 		33F0BE2292E9D3CDB34D9AE8 /* AppointmentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FDD801760670C0A99DB67AB /* AppointmentsView.swift */; };
 		3A05D7028789A95D0F777C65 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBA4AE500DD8CE321B68BA47 /* AppTheme.swift */; };
+		4DB7817CFCA91771C3F6E5A0 /* GigaChatConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1BF5D29665AFB2549BD08D /* GigaChatConfig.swift */; };
 		4ECD9E5931C574055D31A3E8 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DE0162AD119F0AE8BB7C70D /* ProfileView.swift */; };
 		62AAA6A51B15D54B0DA1225B /* HomeSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C45C0241F5C4BC32A542C8F /* HomeSections.swift */; };
 		638B458CE27A82C64350170A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 80D0AD394578CE7BE533BEBE /* Assets.xcassets */; };
@@ -35,6 +36,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0F1BF5D29665AFB2549BD08D /* GigaChatConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GigaChatConfig.swift; sourceTree = "<group>"; };
 		1DE0162AD119F0AE8BB7C70D /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		24200AB8549D911BB7812F52 /* SupabaseConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseConfig.swift; sourceTree = "<group>"; };
 		2F4BA4144C89CE7B5C7D0266 /* concept-pulse.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "concept-pulse.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -69,6 +71,7 @@
 			isa = PBXGroup;
 			children = (
 				9A9C56F4B25266F466D3185D /* AIProvider.swift */,
+				0F1BF5D29665AFB2549BD08D /* GigaChatConfig.swift */,
 				8B3F56AB2E78AA138FFC2F0E /* GigaChatProvider.swift */,
 				BCB6FE976AEE229AF1B05CCC /* MockAIProvider.swift */,
 				24200AB8549D911BB7812F52 /* SupabaseConfig.swift */,
@@ -295,6 +298,7 @@
 				17CEE77B557FD959FBC35487 /* DoctorProfileView.swift in Sources */,
 				682775839E50FEE59474578F /* DoctorSearchView.swift in Sources */,
 				95C343515BA926A53A0D2EF3 /* ExtendedModels.swift in Sources */,
+				4DB7817CFCA91771C3F6E5A0 /* GigaChatConfig.swift in Sources */,
 				E4546BAEAE00D8F304DDBF8C /* GigaChatProvider.swift in Sources */,
 				62AAA6A51B15D54B0DA1225B /* HomeSections.swift in Sources */,
 				268907223950E5A235F2660F /* HomeView.swift in Sources */,
