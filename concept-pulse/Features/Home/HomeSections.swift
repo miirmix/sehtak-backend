@@ -4,6 +4,7 @@ import SwiftUI
 
 struct SpecialtiesSection: View {
     let items: [Specialty]
+    var onTap: ((Specialty) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 12) {
@@ -11,7 +12,8 @@ struct SpecialtiesSection: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(items) { item in
-                        SpecialtyChip(item: item)
+                        Button { onTap?(item) } label: { SpecialtyChip(item: item) }
+                            .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 2)
@@ -164,14 +166,16 @@ private struct MedicationRow: View {
 // MARK: - Top doctors
 
 struct TopDoctorsSection: View {
-    let doctors: [Doctor]
+    let doctors: [DoctorDetail]
+    var onBook: ((DoctorDetail) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 12) {
             SectionHeader(title: L.topDoctors, action: L.viewAll)
             VStack(spacing: 10) {
-                ForEach(doctors) { d in
-                    DoctorCard(doctor: d)
+                ForEach(doctors.prefix(4)) { d in
+                    Button { onBook?(d) } label: { DoctorCard(doctor: d) }
+                        .buttonStyle(.plain)
                 }
             }
         }
@@ -179,14 +183,14 @@ struct TopDoctorsSection: View {
 }
 
 private struct DoctorCard: View {
-    let doctor: Doctor
+    let doctor: DoctorDetail
 
     var body: some View {
         HStack(spacing: 12) {
             avatar
             VStack(alignment: .trailing, spacing: 4) {
-                Text(doctor.nameAr).font(.subheadline.weight(.bold))
-                Text(doctor.specialtyAr).font(.caption).foregroundStyle(AppTheme.textSecondary)
+                Text(doctor.displayName).font(.subheadline.weight(.bold))
+                Text(doctor.displaySpecialty).font(.caption).foregroundStyle(AppTheme.textSecondary)
                 ratingRow
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -201,9 +205,7 @@ private struct DoctorCard: View {
     private var avatar: some View {
         ZStack {
             Circle().fill(doctor.avatarColor.opacity(0.18))
-            Text(doctor.initials)
-                .font(.headline.weight(.bold))
-                .foregroundStyle(doctor.avatarColor)
+            Text(doctor.initials).font(.headline.weight(.bold)).foregroundStyle(doctor.avatarColor)
         }
         .frame(width: 56, height: 56)
     }
@@ -211,28 +213,21 @@ private struct DoctorCard: View {
     private var ratingRow: some View {
         HStack(spacing: 8) {
             HStack(spacing: 3) {
-                Image(systemName: "star.fill")
-                    .font(.caption2).foregroundStyle(AppTheme.warning)
-                Text(String(format: "%.1f", doctor.rating))
-                    .font(.caption.weight(.semibold))
+                Image(systemName: "star.fill").font(.caption2).foregroundStyle(AppTheme.warning)
+                Text(String(format: "%.1f", doctor.rating)).font(.caption.weight(.semibold))
             }
             Text("•").font(.caption2).foregroundStyle(AppTheme.textSecondary)
-            Text(doctor.cityAr)
-                .font(.caption2).foregroundStyle(AppTheme.textSecondary)
+            Text(doctor.displayCity).font(.caption2).foregroundStyle(AppTheme.textSecondary)
         }
     }
 
     private var bookButton: some View {
         VStack(spacing: 6) {
             Text(L.bookNow)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.white)
+                .font(.caption.weight(.bold)).foregroundStyle(.white)
                 .padding(.horizontal, 14).padding(.vertical, 8)
-                .background(AppTheme.primary)
-                .clipShape(Capsule())
-            Text(doctor.nextSlotAr)
-                .font(.system(size: 10))
-                .foregroundStyle(AppTheme.textSecondary)
+                .background(AppTheme.primary).clipShape(Capsule())
+            Text(doctor.nextSlotAr).font(.system(size: 10)).foregroundStyle(AppTheme.textSecondary)
         }
     }
 }
