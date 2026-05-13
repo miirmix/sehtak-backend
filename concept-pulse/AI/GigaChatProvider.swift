@@ -1,10 +1,10 @@
 import SwiftUI
 
-// MARK: - OpenAI Provider
-// All calls go through the Supabase Edge Function — the OpenAI key never leaves the server.
+// MARK: - GigaChat Provider
+// All calls go through the Supabase Edge Function — the GigaChat key never leaves the server.
 // Requires a valid Supabase anon JWT in the Authorization header (Edge Function has verify_jwt=true).
 
-final class OpenAIProvider: AIProviderProtocol {
+final class GigaChatProvider: AIProviderProtocol {
 
     // MARK: Text Query
     func generateMedicalResponse(query: String, language: AppLanguage) async -> AIResponse {
@@ -19,16 +19,20 @@ final class OpenAIProvider: AIProviderProtocol {
             )
         }
 
-        let body: [String: Any] = ["action": "text_query", "query": query, "language": language.rawValue]
+        let body: [String: Any] = [
+            "action": "text_query",
+            "query": query,
+            "language": language.rawValue
+        ]
         guard let dto = try? await callProxy(body: body) else {
             return fallbackResponse(language: language)
         }
 
-        let isEmergency = dto["isEmergency"] as? Bool ?? false
-        let urgencyRaw  = dto["urgency"]     as? String ?? "routine"
-        let specialtyKey = dto["specialtyKey"] as? String
-        let text         = dto["responseText"] as? String ?? ""
-        let disclaimer   = dto["disclaimer"]   as? String ?? Loc.aiDisclaimer
+        let isEmergency     = dto["isEmergency"]      as? Bool   ?? false
+        let urgencyRaw      = dto["urgency"]           as? String ?? "routine"
+        let specialtyKey    = dto["specialtyKey"]      as? String
+        let text            = dto["responseText"]      as? String ?? ""
+        let disclaimer      = dto["disclaimer"]        as? String ?? Loc.aiDisclaimer
         let specialtyDisplay = dto["specialtyDisplay"] as? String
 
         if isEmergency {
@@ -40,7 +44,7 @@ final class OpenAIProvider: AIProviderProtocol {
         let urgency  = parseUrgency(urgencyRaw)
         let doctors  = specialtyKey.map { matchDoctors(specialtyKey: $0) } ?? []
         let cardTags = buildTags(urgency: urgency, specialty: specialtyDisplay, language: language)
-        let card = specialtyKey != nil ? AnalysisResult(
+        let card: AnalysisResult? = specialtyKey != nil ? AnalysisResult(
             title: language == .arabic ? "تحليل الأعراض" : "Анализ симптомов",
             summary: text,
             tags: cardTags,
@@ -72,7 +76,15 @@ final class OpenAIProvider: AIProviderProtocol {
             return nonMedicalReject(language: language)
         }
 
-        let isMedical  = dto["isMedical"]  as? Bool ?? false
+        // If backend signals image vision is unsupported
+        if dto["visionUnsupported"] as? Bool == true {
+            let msg = language == .arabic
+                ? "تحليل الصور غير متاح حالياً. يمكنك وصف أعراضك نصياً وسأساعدك."
+                : "Анализ изображений временно недоступен. Опишите симптомы текстом, и я помогу."
+            return AIImageAnalysis(category: .unknown, result: nil, rejectMessage: msg)
+        }
+
+        let isMedical  = dto["isMedical"]  as? Bool   ?? false
         let category   = dto["category"]   as? String ?? "unknown"
         let title      = dto["title"]      as? String ?? (language == .arabic ? "تحليل الصورة" : "Анализ снимка")
         let summary    = dto["summary"]    as? String ?? ""
@@ -84,8 +96,10 @@ final class OpenAIProvider: AIProviderProtocol {
             return nonMedicalReject(language: language)
         }
 
-        let allText = findings.isEmpty ? summary : summary + "\n\n" + findings.map { "• \($0)" }.joined(separator: "\n")
-        let tags = buildImageTags(category: category, specialty: specialty)
+        let allText = findings.isEmpty
+            ? summary
+            : summary + "\n\n" + findings.map { "• \($0)" }.joined(separator: "\n")
+        let tags   = buildImageTags(category: category, specialty: specialty)
         let result = AnalysisResult(title: title, summary: allText, tags: tags, disclaimer: disclaimer)
         return AIImageAnalysis(category: mapCategory(category), result: result, rejectMessage: nil)
     }
@@ -94,13 +108,12 @@ final class OpenAIProvider: AIProviderProtocol {
     func triageSymptoms(_ symptoms: String, language: AppLanguage) async -> TriageResult {
         let response = await generateMedicalResponse(query: symptoms, language: language)
         let specialty = response.specialty ?? (language == .arabic ? "طب عام" : "Терапевт")
-        let doctors   = response.suggestedDoctors
         return TriageResult(
             specialty: specialty,
             specialtyKey: response.specialty ?? "باطنة",
             urgency: .routine,
             reasoning: response.text,
-            suggestedDoctors: doctors,
+            suggestedDoctors: response.suggestedDoctors,
             disclaimer: Loc.aiDisclaimer
         )
     }
@@ -150,8 +163,10 @@ final class OpenAIProvider: AIProviderProtocol {
         case .urgent:
             tags.append(AnalysisTag(label: language == .arabic ? "عاجل 🟡" : "Неотложно 🟡", color: .orange))
         case .routine:
-            tags.append(AnalysisTag(label: language == .arabic ? "روتيني 🟢" : "Плановый 🟢",
-                                    color: Color(red: 0.30, green: 0.72, blue: 0.55)))
+            tags.append(AnalysisTag(
+                label: language == .arabic ? "روتيني 🟢" : "Плановый 🟢",
+                color: Color(red: 0.30, green: 0.72, blue: 0.55)
+            ))
         }
         return tags
     }

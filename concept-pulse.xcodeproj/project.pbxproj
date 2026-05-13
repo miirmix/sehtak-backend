@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0B0B1A197231E1D036851654 /* OpenAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58F75A2229B2B162BDFF7D02 /* OpenAIProvider.swift */; };
 		0EA7FA6E73661C70CD7CAD41 /* AIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A9C56F4B25266F466D3185D /* AIProvider.swift */; };
 		1744A95F5EE05498D20230E8 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = C00D65F993173C2CC6E26A18 /* LaunchScreen.storyboard */; };
 		17CEE77B557FD959FBC35487 /* DoctorProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DF868C2A9A63E8772B87DC7 /* DoctorProfileView.swift */; };
@@ -30,6 +29,7 @@
 		C9344BFA33D782CDDB360153 /* ChatComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AE5A3FEAFE6B2D9E1AD843B /* ChatComponents.swift */; };
 		CE4F52F8F924100829B7951A /* SehatyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A6038897DEF0DB8773C3D38 /* SehatyApp.swift */; };
 		D12A119E6C0FCA22899A3EC5 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B518BE8C739559CAF5D57433 /* AppState.swift */; };
+		E4546BAEAE00D8F304DDBF8C /* GigaChatProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B3F56AB2E78AA138FFC2F0E /* GigaChatProvider.swift */; };
 		E79D1F5A6F0A5B5BBB9DD58A /* MedicalRecordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0D26C9B37F6A735006F903 /* MedicalRecordsView.swift */; };
 		E8ADEAD54DBE3E224C9F4390 /* BookingConfirmView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF505EAEB414FACBE5773228 /* BookingConfirmView.swift */; };
 /* End PBXBuildFile section */
@@ -40,11 +40,11 @@
 		2F4BA4144C89CE7B5C7D0266 /* concept-pulse.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "concept-pulse.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AE5A3FEAFE6B2D9E1AD843B /* ChatComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatComponents.swift; sourceTree = "<group>"; };
 		3DF868C2A9A63E8772B87DC7 /* DoctorProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorProfileView.swift; sourceTree = "<group>"; };
-		58F75A2229B2B162BDFF7D02 /* OpenAIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIProvider.swift; sourceTree = "<group>"; };
 		7A6038897DEF0DB8773C3D38 /* SehatyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SehatyApp.swift; sourceTree = "<group>"; };
 		7C45C0241F5C4BC32A542C8F /* HomeSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSections.swift; sourceTree = "<group>"; };
 		80D0AD394578CE7BE533BEBE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		8A0D26C9B37F6A735006F903 /* MedicalRecordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MedicalRecordsView.swift; sourceTree = "<group>"; };
+		8B3F56AB2E78AA138FFC2F0E /* GigaChatProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GigaChatProvider.swift; sourceTree = "<group>"; };
 		8FDD801760670C0A99DB67AB /* AppointmentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppointmentsView.swift; sourceTree = "<group>"; };
 		9225368FA9D29214E3C0D7AE /* RecordDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordDetailView.swift; sourceTree = "<group>"; };
 		9A9C56F4B25266F466D3185D /* AIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProvider.swift; sourceTree = "<group>"; };
@@ -69,8 +69,8 @@
 			isa = PBXGroup;
 			children = (
 				9A9C56F4B25266F466D3185D /* AIProvider.swift */,
+				8B3F56AB2E78AA138FFC2F0E /* GigaChatProvider.swift */,
 				BCB6FE976AEE229AF1B05CCC /* MockAIProvider.swift */,
-				58F75A2229B2B162BDFF7D02 /* OpenAIProvider.swift */,
 				24200AB8549D911BB7812F52 /* SupabaseConfig.swift */,
 			);
 			path = AI;
@@ -295,12 +295,12 @@
 				17CEE77B557FD959FBC35487 /* DoctorProfileView.swift in Sources */,
 				682775839E50FEE59474578F /* DoctorSearchView.swift in Sources */,
 				95C343515BA926A53A0D2EF3 /* ExtendedModels.swift in Sources */,
+				E4546BAEAE00D8F304DDBF8C /* GigaChatProvider.swift in Sources */,
 				62AAA6A51B15D54B0DA1225B /* HomeSections.swift in Sources */,
 				268907223950E5A235F2660F /* HomeView.swift in Sources */,
 				E79D1F5A6F0A5B5BBB9DD58A /* MedicalRecordsView.swift in Sources */,
 				6EE54F86A730E31C19851D47 /* MockAIProvider.swift in Sources */,
 				AAA14A19BE2AC33B9C2761B3 /* Models.swift in Sources */,
-				0B0B1A197231E1D036851654 /* OpenAIProvider.swift in Sources */,
 				1F666E194E06CB40FEA3C1C9 /* Placeholders.swift in Sources */,
 				4ECD9E5931C574055D31A3E8 /* ProfileView.swift in Sources */,
 				2B827C4FD5CA10BB9C212884 /* RecordDetailView.swift in Sources */,

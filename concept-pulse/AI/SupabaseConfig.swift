@@ -2,7 +2,8 @@ import Foundation
 
 // MARK: - Supabase Configuration
 // Publishable/anon key is safe to embed in client apps — it has no elevated privileges.
-// The actual OpenAI API key lives ONLY in Supabase Edge Function secrets.
+// GigaChat credentials (GIGACHAT_AUTH_KEY, GIGACHAT_SCOPE) live ONLY in Supabase Edge Function secrets.
+// Required secrets: GIGACHAT_AUTH_KEY=<your_authorization_key>, GIGACHAT_SCOPE=GIGACHAT_API_PERS
 
 enum SupabaseConfig {
     static let projectURL = "https://cjhffbqnajxacrvexxca.supabase.co"

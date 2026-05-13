@@ -46,10 +46,11 @@ enum TriageUrgency {
 // MARK: - Factory
 
 enum AIProviderFactory {
-    /// OpenAIProvider routes all calls through the Supabase Edge Function.
-    /// Fall back to MockAIProvider() locally if the Edge Function is unavailable.
+    /// GigaChatProvider routes all calls through the Supabase Edge Function.
+    /// GigaChat credentials (GIGACHAT_AUTH_KEY / GIGACHAT_SCOPE) live only in Supabase secrets.
+    /// Fall back to MockAIProvider() for offline testing or when secrets are not yet configured.
     static func make() -> AIProviderProtocol {
-        return OpenAIProvider()
+        return GigaChatProvider()
     }
 }
 
