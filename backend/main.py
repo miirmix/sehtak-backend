@@ -51,7 +51,7 @@ def _build_ssl() -> httpx.SSLConfig | bool:
 
 
 def _auth_header() -> str:
-    raw_key = os.environ.get("GIGACHAT_AUTH_KEY", "")
+    raw_key = os.environ.get("GIGACHAT_AUTH_KEY", "").strip()
     if not raw_key:
         raise RuntimeError("GIGACHAT_AUTH_KEY is not set")
     encoded = base64.b64encode(raw_key.encode()).decode()
@@ -105,10 +105,30 @@ async def _get_access_token() -> str:
 # ── App lifecycle ──────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # ── Env-var diagnostics (no secret values printed) ──
+    raw_key = os.environ.get("GIGACHAT_AUTH_KEY", "")
+    raw_scope = os.environ.get("GIGACHAT_SCOPE", "")
+    log.info("ENV CHECK: GIGACHAT_AUTH_KEY present=%s len=%d", bool(raw_key), len(raw_key))
+    log.info("ENV CHECK: GIGACHAT_SCOPE    present=%s value=%r", bool(raw_scope), raw_scope or "(empty)")
+
+    # Detect hidden whitespace / non-printable chars
+    if raw_key:
+        stripped = raw_key.strip()
+        if stripped != raw_key:
+            log.warning("ENV WARNING: GIGACHAT_AUTH_KEY has leading/trailing whitespace! "
+                        "Stripped len=%d vs raw len=%d", len(stripped), len(raw_key))
+        log.info("ENV CHECK: key_prefix=%s key_suffix=%s", raw_key[:4], raw_key[-4:])
+    else:
+        # List env var names present (not values) to help debug
+        known_keys = [k for k in os.environ if "GIGA" in k.upper() or "AUTH" in k.upper()]
+        log.warning("ENV CHECK: GIGACHAT_AUTH_KEY not found. Env vars containing GIGA/AUTH: %s", known_keys)
+        all_keys = sorted(os.environ.keys())
+        log.info("ENV CHECK: All env var names: %s", all_keys)
+
+    # ── Cert bundle check ──
     if CERT_BUNDLE.exists():
         size = CERT_BUNDLE.stat().st_size
         log.info("Cert bundle found: %s (%d bytes)", CERT_BUNDLE, size)
-        # Count how many certs are in the bundle
         text = CERT_BUNDLE.read_text(errors="replace")
         count = text.count("BEGIN CERTIFICATE")
         log.info("Cert bundle contains %d certificate(s)", count)
@@ -179,8 +199,20 @@ async def test_gigachat():
 
     raw_key = os.environ.get("GIGACHAT_AUTH_KEY", "")
     result["has_auth_key"] = bool(raw_key)
+    result["key_raw_len"] = len(raw_key)
     if raw_key:
-        result["key_hint"] = raw_key[:6] + "..." + raw_key[-4:]
+        stripped = raw_key.strip()
+        result["key_has_whitespace"] = (stripped != raw_key)
+        result["key_stripped_len"] = len(stripped)
+        result["key_hint"] = raw_key[:4] + "..." + raw_key[-4:]
+    else:
+        # Show which env var names are visible — helps debug Railway scoping
+        result["env_keys_with_giga"] = [k for k in os.environ if "GIGA" in k.upper()]
+        result["env_keys_with_auth"] = [k for k in os.environ if "AUTH" in k.upper()]
+
+    scope_val = os.environ.get("GIGACHAT_SCOPE", "")
+    result["has_scope"] = bool(scope_val)
+    result["scope_value"] = scope_val or "(not set)"
 
     # — OAuth —
     try:
