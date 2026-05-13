@@ -4,6 +4,7 @@ import SwiftUI
 
 struct ChatBubble: View {
     let message: ChatMessage
+    var onBookDoctor: ((DoctorDetail) -> Void)?
 
     var isUser: Bool { message.sender == .user }
 
@@ -28,6 +29,14 @@ struct ChatBubble: View {
             ImageBubble(image: img, caption: caption, isUser: isUser)
         case .analysisResult(let result):
             AnalysisCard(result: result)
+        case .triageResult(let triage):
+            TriageCard(triage: triage, onBook: onBookDoctor)
+        case .emergencyAlert(let msg):
+            EmergencyBubble(message: msg)
+        case .nonMedicalReject(let msg):
+            TextBubble(text: msg, isUser: false)
+        case .doctorSuggestions(let doctors):
+            DoctorSuggestionsCard(doctors: doctors, onBook: onBookDoctor)
         }
     }
 
@@ -68,6 +77,29 @@ struct TextBubble: View {
             .background(isUser ? AppTheme.primary : AppTheme.card)
             .clipShape(BubbleShape(isUser: isUser))
             .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+    }
+}
+
+// MARK: - Emergency Bubble
+
+struct EmergencyBubble: View {
+    let message: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.white)
+            Text(message)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.leading)
+        }
+        .padding(14)
+        .background(Color.red.gradient)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(color: Color.red.opacity(0.3), radius: 10, x: 0, y: 4)
+        .frame(maxWidth: 300)
     }
 }
 
@@ -134,16 +166,7 @@ struct AnalysisCard: View {
                         .clipShape(Capsule())
                 }
             }
-            HStack(spacing: 6) {
-                Spacer()
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.warning)
-                Text(result.disclaimer)
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .multilineTextAlignment(.trailing)
-            }
+            DisclaimerRow(text: result.disclaimer)
         }
         .padding(14)
         .background(AppTheme.card)
@@ -154,6 +177,191 @@ struct AnalysisCard: View {
         )
         .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
         .frame(maxWidth: 300)
+    }
+}
+
+// MARK: - Triage Card
+
+struct TriageCard: View {
+    let triage: TriageResult
+    var onBook: ((DoctorDetail) -> Void)?
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 12) {
+            headerRow
+            Divider()
+            Text(triage.reasoning)
+                .font(.callout)
+                .foregroundStyle(AppTheme.textPrimary)
+                .multilineTextAlignment(.trailing)
+            specialtyBadge
+            if !triage.suggestedDoctors.isEmpty {
+                doctorsList
+            }
+            DisclaimerRow(text: triage.disclaimer)
+        }
+        .padding(14)
+        .background(AppTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(AppTheme.primarySoft, lineWidth: 1.5)
+        )
+        .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+        .frame(maxWidth: 320)
+    }
+
+    private var headerRow: some View {
+        HStack(spacing: 8) {
+            Spacer()
+            let title = Loc.lang == .arabic ? "اقتراح التخصص" : "Рекомендация специалиста"
+            Text(title)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(AppTheme.textPrimary)
+            ZStack {
+                Circle().fill(AppTheme.primarySoft).frame(width: 32, height: 32)
+                Image(systemName: "stethoscope")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppTheme.primary)
+            }
+        }
+    }
+
+    private var specialtyBadge: some View {
+        HStack(spacing: 6) {
+            Spacer()
+            urgencyLabel
+            Text(triage.specialty)
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(AppTheme.primary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(AppTheme.primarySoft)
+                .clipShape(Capsule())
+        }
+    }
+
+    @ViewBuilder
+    private var urgencyLabel: some View {
+        switch triage.urgency {
+        case .emergency:
+            urgencyChip(Loc.lang == .arabic ? "طارئ 🔴" : "Срочно 🔴", color: .red)
+        case .urgent:
+            urgencyChip(Loc.lang == .arabic ? "عاجل 🟡" : "Неотложно 🟡", color: .orange)
+        case .routine:
+            urgencyChip(Loc.lang == .arabic ? "روتيني 🟢" : "Плановый 🟢", color: AppTheme.success)
+        }
+    }
+
+    private func urgencyChip(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.1))
+            .clipShape(Capsule())
+    }
+
+    private var doctorsList: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            let label = Loc.lang == .arabic ? "أطباء مقترحون" : "Рекомендуемые врачи"
+            Text(label)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(AppTheme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            ForEach(triage.suggestedDoctors.prefix(2)) { doc in
+                MiniDoctorRow(doctor: doc) { onBook?(doc) }
+            }
+        }
+    }
+}
+
+// MARK: - Doctor Suggestions Card
+
+struct DoctorSuggestionsCard: View {
+    let doctors: [DoctorDetail]
+    var onBook: ((DoctorDetail) -> Void)?
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 10) {
+            let title = Loc.lang == .arabic ? "أطباء مقترحون لك 🏥" : "Рекомендуемые врачи 🏥"
+            Text(title)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(AppTheme.textPrimary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            ForEach(doctors.prefix(3)) { doc in
+                MiniDoctorRow(doctor: doc) { onBook?(doc) }
+            }
+        }
+        .padding(14)
+        .background(AppTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(AppTheme.primarySoft, lineWidth: 1.5)
+        )
+        .frame(maxWidth: 320)
+    }
+}
+
+// MARK: - Mini Doctor Row
+
+struct MiniDoctorRow: View {
+    let doctor: DoctorDetail
+    let onBook: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            let bookLabel = Loc.lang == .arabic ? "احجز" : "Записаться"
+            Button(action: onBook) {
+                Text(bookLabel)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(AppTheme.primary)
+                    .clipShape(Capsule())
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(doctor.displayName)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(AppTheme.textPrimary)
+                Text(doctor.displaySpecialty)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+            Circle()
+                .fill(doctor.avatarColor)
+                .frame(width: 36, height: 36)
+                .overlay(
+                    Text(doctor.initials)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                )
+        }
+        .padding(10)
+        .background(AppTheme.bg)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+// MARK: - Disclaimer Row
+
+struct DisclaimerRow: View {
+    let text: String
+    var body: some View {
+        HStack(spacing: 6) {
+            Spacer()
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(AppTheme.warning)
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
+                .multilineTextAlignment(.trailing)
+        }
     }
 }
 
@@ -207,7 +415,7 @@ struct QuickPromptChip: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Spacer()
-                Text(prompt.textAr)
+                Text(prompt.displayText)
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(AppTheme.textPrimary)
                     .multilineTextAlignment(.trailing)

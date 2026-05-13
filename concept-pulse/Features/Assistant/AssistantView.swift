@@ -2,13 +2,17 @@ import SwiftUI
 import PhotosUI
 
 struct AssistantView: View {
-    @State private var messages: [ChatMessage] = SampleConversation.messages
+    @EnvironmentObject private var appState: AppState
+    @State private var messages: [ChatMessage] = []
     @State private var inputText = ""
     @State private var isTyping = false
     @State private var showImagePicker = false
     @State private var selectedItem: PhotosPickerItem?
     @State private var showQuickPrompts = true
+    @State private var navigateToDoctorDetail: DoctorDetail?
     @FocusState private var inputFocused: Bool
+
+    private let aiProvider: AIProviderProtocol = AIProviderFactory.make()
 
     var body: some View {
         NavigationStack {
@@ -19,10 +23,15 @@ struct AssistantView: View {
                     inputBar
                 }
             }
-            .navigationTitle(L.assistant)
+            .navigationTitle(Loc.assistant)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
+            .navigationDestination(item: $navigateToDoctorDetail) { doc in
+                DoctorProfileView(doctor: doc)
+            }
         }
+        .onAppear { if messages.isEmpty { resetChat() } }
+        .onChange(of: appState.language) { _, _ in resetChat() }
         .onChange(of: selectedItem) { _, item in handlePhotoSelection(item) }
     }
 
@@ -37,8 +46,10 @@ struct AssistantView: View {
                             .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                     ForEach(messages) { msg in
-                        ChatBubble(message: msg)
-                            .id(msg.id)
+                        ChatBubble(message: msg, onBookDoctor: { doctor in
+                            navigateToDoctorDetail = doctor
+                        })
+                        .id(msg.id)
                     }
                     if isTyping { TypingIndicator() }
                     Color.clear.frame(height: 80).id("bottom")
@@ -58,7 +69,8 @@ struct AssistantView: View {
     // MARK: - Quick Prompts Grid
     private var quickPromptsGrid: some View {
         VStack(alignment: .trailing, spacing: 10) {
-            Text("ابدأ بسؤال سريع")
+            let label = Loc.lang == .arabic ? "ابدأ بسؤال سريع" : "Начните с быстрого вопроса"
+            Text(label)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(AppTheme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -66,7 +78,7 @@ struct AssistantView: View {
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(AIPrompts.quickPrompts) { prompt in
                     QuickPromptChip(prompt: prompt) {
-                        send(prompt.textAr)
+                        sendText(prompt.displayText)
                         withAnimation { showQuickPrompts = false }
                     }
                 }
@@ -86,11 +98,12 @@ struct AssistantView: View {
                     .clipShape(Circle())
             }
             HStack {
-                TextField("اكتب سؤالك الصحي...", text: $inputText, axis: .vertical)
+                let placeholder = Loc.lang == .arabic ? "اكتب أعراضك أو سؤالك..." : "Опишите симптомы или задайте вопрос..."
+                TextField(placeholder, text: $inputText, axis: .vertical)
                     .font(.body)
                     .lineLimit(1...4)
                     .focused($inputFocused)
-                    .multilineTextAlignment(.trailing)
+                    .multilineTextAlignment(Loc.lang == .arabic ? .trailing : .leading)
                 if !inputText.isEmpty {
                     Button { inputText = "" } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -124,10 +137,7 @@ struct AssistantView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Button {
-                withAnimation {
-                    messages = SampleConversation.messages
-                    showQuickPrompts = true
-                }
+                withAnimation { resetChat() }
             } label: {
                 Image(systemName: "arrow.counterclockwise")
                     .font(.subheadline.weight(.medium))
@@ -136,34 +146,63 @@ struct AssistantView: View {
         }
         ToolbarItem(placement: .topBarLeading) {
             HStack(spacing: 6) {
-                Circle()
-                    .fill(AppTheme.success)
-                    .frame(width: 8, height: 8)
-                Text("متصل")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(AppTheme.success)
+                Circle().fill(AppTheme.success).frame(width: 8, height: 8)
+                let label = Loc.lang == .arabic ? "متصل" : "Онлайн"
+                Text(label).font(.caption.weight(.medium)).foregroundStyle(AppTheme.success)
             }
         }
     }
 
     // MARK: - Actions
+    private func resetChat() {
+        messages = SampleConversation.welcomeMessages(language: appState.language)
+        showQuickPrompts = true
+    }
+
     private func sendCurrent() {
         let text = inputText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
         inputText = ""
-        send(text)
+        sendText(text)
     }
 
-    private func send(_ text: String) {
+    private func sendText(_ text: String) {
         withAnimation { showQuickPrompts = false }
         let userMsg = ChatMessage(sender: .user, content: .text(text), timestamp: Date())
         messages.append(userMsg)
         isTyping = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-            isTyping = false
-            let reply = SampleConversation.aiReply(for: text)
-            let aiMsg = ChatMessage(sender: .assistant, content: .text(reply), timestamp: Date())
-            withAnimation { messages.append(aiMsg) }
+        Task {
+            let response = await aiProvider.generateMedicalResponse(query: text, language: appState.language)
+            await MainActor.run { handleAIResponse(response) }
+        }
+    }
+
+    private func handleAIResponse(_ response: AIResponse) {
+        isTyping = false
+
+        if response.isEmergency {
+            let msg = ChatMessage(sender: .assistant, content: .emergencyAlert(response.text), timestamp: Date())
+            withAnimation { messages.append(msg) }
+            return
+        }
+
+        if let card = response.analysisCard {
+            let msg = ChatMessage(sender: .assistant, content: .analysisResult(card), timestamp: Date())
+            withAnimation { messages.append(msg) }
+        } else {
+            let msg = ChatMessage(sender: .assistant, content: .text(response.text), timestamp: Date())
+            withAnimation { messages.append(msg) }
+        }
+
+        if !response.suggestedDoctors.isEmpty {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                let suggMsg = ChatMessage(
+                    sender: .assistant,
+                    content: .doctorSuggestions(response.suggestedDoctors),
+                    timestamp: Date()
+                )
+                withAnimation { self.messages.append(suggMsg) }
+            }
         }
     }
 
@@ -178,18 +217,30 @@ struct AssistantView: View {
     }
 
     private func appendImageMessage(_ img: UIImage) {
-        let userMsg = ChatMessage(sender: .user, content: .image(img, caption: "صورة طبية للتحليل"), timestamp: Date())
+        let caption = Loc.lang == .arabic ? "صورة للتحليل" : "Изображение для анализа"
+        let userMsg = ChatMessage(sender: .user, content: .image(img, caption: caption), timestamp: Date())
         messages.append(userMsg)
         isTyping = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
-            isTyping = false
-            let result = SampleConversation.sampleAnalysis
-            let aiMsg = ChatMessage(sender: .assistant, content: .analysisResult(result), timestamp: Date())
-            withAnimation { messages.append(aiMsg) }
+        Task {
+            let analysis = await aiProvider.analyzeImage(img, language: appState.language)
+            await MainActor.run { handleImageAnalysis(analysis) }
+        }
+    }
+
+    private func handleImageAnalysis(_ analysis: AIImageAnalysis) {
+        isTyping = false
+        if analysis.category == .nonMedical, let reject = analysis.rejectMessage {
+            let msg = ChatMessage(sender: .assistant, content: .nonMedicalReject(reject), timestamp: Date())
+            withAnimation { messages.append(msg) }
+        } else if let result = analysis.result {
+            let msg = ChatMessage(sender: .assistant, content: .analysisResult(result), timestamp: Date())
+            withAnimation { messages.append(msg) }
         }
     }
 }
 
 #Preview {
-    AssistantView().environment(\.layoutDirection, .rightToLeft)
+    AssistantView()
+        .environmentObject(AppState.shared)
+        .environment(\.layoutDirection, .rightToLeft)
 }
