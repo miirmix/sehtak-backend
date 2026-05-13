@@ -2,15 +2,15 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject private var appState: AppState
-    @State private var searchText: String = ""
     @State private var showSearch = false
     @State private var selectedDoctor: DoctorDetail? = nil
+    @State private var showCKD = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    HomeHeader()
+                    homeHeader
                     searchBarButton
                     HealthSummaryCard()
                     UpcomingAppointmentCard(appointment: SampleData.nextAppointment)
@@ -27,13 +27,38 @@ struct HomeView: View {
             }
             .background(AppTheme.bg.ignoresSafeArea())
             .navigationBarHidden(true)
-            .navigationDestination(isPresented: $showSearch) {
-                DoctorSearchView()
+            .navigationDestination(isPresented: $showSearch) { DoctorSearchView() }
+            .navigationDestination(item: $selectedDoctor) { doc in DoctorProfileView(doctor: doc) }
+            .navigationDestination(isPresented: $showCKD) { CKDRiskView() }
+        }
+    }
+
+    private var homeHeader: some View {
+        HStack(spacing: 12) {
+            // Drawer toggle
+            Button { withAnimation { appState.showDrawer = true } } label: {
+                Image(systemName: "line.3.horizontal")
+                    .font(.title3.weight(.medium))
+                    .foregroundStyle(AppTheme.textPrimary)
             }
-            .navigationDestination(item: $selectedDoctor) { doc in
-                DoctorProfileView(doctor: doc)
+            Spacer()
+            VStack(alignment: Loc.lang.isRTL ? .trailing : .leading, spacing: 4) {
+                Text(Loc.lang == .arabic
+                     ? "مرحباً، \(appState.userProfile.name.isEmpty ? "محمد" : appState.userProfile.name) 👋"
+                     : "Привет, \(appState.userProfile.name.isEmpty ? "Мухаммад" : appState.userProfile.name) 👋")
+                    .font(.title3.weight(.bold)).foregroundStyle(AppTheme.textPrimary)
+                Text(Loc.lang == .arabic ? "كيف حالك اليوم؟" : "Как вы сегодня?")
+                    .font(.subheadline).foregroundStyle(AppTheme.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: Loc.lang.isRTL ? .trailing : .leading)
+
+            ZStack {
+                Circle().fill(AppTheme.primarySoft).frame(width: 46, height: 46)
+                Image(systemName: "bell.fill").foregroundStyle(AppTheme.primary)
+                Circle().fill(AppTheme.accent).frame(width: 10, height: 10).offset(x: 14, y: -14)
             }
         }
+        .padding(.top, 8)
     }
 
     private var searchBarButton: some View {
@@ -51,31 +76,6 @@ struct HomeView: View {
             .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
         }
         .buttonStyle(.plain)
-    }
-}
-
-// MARK: - Header
-
-struct HomeHeader: View {
-    var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .trailing, spacing: 4) {
-                Text("\(L.greeting)، محمد 👋")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(AppTheme.textPrimary)
-                Text(L.howAreYou)
-                    .font(.subheadline)
-                    .foregroundStyle(AppTheme.textSecondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .trailing)
-
-            ZStack {
-                Circle().fill(AppTheme.primarySoft).frame(width: 46, height: 46)
-                Image(systemName: "bell.fill").foregroundStyle(AppTheme.primary)
-                Circle().fill(AppTheme.accent).frame(width: 10, height: 10).offset(x: 14, y: -14)
-            }
-        }
-        .padding(.top, 8)
     }
 }
 
