@@ -54,12 +54,12 @@ struct MedicalRecordsView: View {
     private var patientBanner: some View {
         HStack(spacing: 14) {
             VStack(alignment: .trailing, spacing: 4) {
-                Text(Loc.lang == .arabic ? "محمد أحمد العمري" : "Мухаммад Аль-Умари")
+                Text(appState.userProfile.name.isEmpty ? L("محمد أحمد", "Мухаммад Ахмад") : appState.userProfile.name)
                     .font(.subheadline.weight(.bold))
                 HStack(spacing: 8) {
-                    Text(Loc.lang == .arabic ? "٣٥ سنة" : "35 лет").font(.caption).foregroundStyle(AppTheme.textSecondary)
+                    Text(L("٣٥ سنة", "35 лет")).font(.caption).foregroundStyle(AppTheme.textSecondary)
                     Text("•").font(.caption2).foregroundStyle(AppTheme.textSecondary)
-                    Text(Loc.lang == .arabic ? "فصيلة الدم: B+" : "Группа крови: B+")
+                    Text(L("فصيلة الدم: B+", "Группа крови: B+"))
                         .font(.caption).foregroundStyle(AppTheme.primary)
                 }
             }
@@ -110,8 +110,8 @@ struct RecordRow: View {
         HStack(spacing: 14) {
             VStack(alignment: .trailing, spacing: 4) {
                 Text(record.displayTitle).font(.subheadline.weight(.semibold))
-                Text(record.doctorAr).font(.caption).foregroundStyle(AppTheme.textSecondary)
-                Text(record.dateAr).font(.caption2).foregroundStyle(AppTheme.textSecondary)
+                Text(record.displayDoctor).font(.caption).foregroundStyle(AppTheme.textSecondary)
+                Text(record.displayDate).font(.caption2).foregroundStyle(AppTheme.textSecondary)
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
             ZStack {

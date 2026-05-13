@@ -33,7 +33,7 @@ struct RoleSelectionView: View {
             .scaleEffect(animateIn ? 1 : 0.7)
             .animation(.spring(response: 0.5, dampingFraction: 0.7).delay(0.1), value: animateIn)
 
-            Text(Loc.lang == .arabic ? "مرحباً بك في صحتي" : "Добро пожаловать в Sehatي")
+            Text(Loc.lang == .arabic ? "صحتك بالدني" : "Моё здоровье")
                 .font(.title.weight(.bold))
                 .foregroundStyle(AppTheme.textPrimary)
                 .multilineTextAlignment(.center)

@@ -38,18 +38,19 @@ struct DoctorRootView: View {
     }
 }
 
-// MARK: - Doctor Appointments (reuses patient list filtered)
+// MARK: - Doctor Appointments (shows patients booked with this doctor)
 
 struct DoctorAppointmentsView: View {
     @EnvironmentObject private var appState: AppState
     private var isArabic: Bool { Loc.lang == .arabic }
+    private let patientAppts = SampleData.doctorPatientAppointments
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 14) {
-                    ForEach(SampleData.appointments) { appt in
-                        DoctorApptCard(appt: appt)
+                    ForEach(patientAppts) { appt in
+                        DoctorPatientApptCard(appt: appt)
                     }
                     Color.clear.frame(height: 20)
                 }
@@ -62,29 +63,28 @@ struct DoctorAppointmentsView: View {
     }
 }
 
-struct DoctorApptCard: View {
-    let appt: Appointment
+struct DoctorPatientApptCard: View {
+    let appt: PatientAppointment
     private var isArabic: Bool { Loc.lang == .arabic }
 
     var body: some View {
         HStack(spacing: 14) {
             ZStack {
-                Circle().fill(appt.doctor.avatarColor.opacity(0.18)).frame(width: 52, height: 52)
-                Text(appt.doctor.initials).font(.headline.weight(.bold)).foregroundStyle(appt.doctor.avatarColor)
+                Circle().fill(appt.avatarColor.opacity(0.18)).frame(width: 52, height: 52)
+                Text(appt.initials).font(.headline.weight(.bold)).foregroundStyle(appt.avatarColor)
             }
             VStack(alignment: isArabic ? .trailing : .leading, spacing: 4) {
-                Text(appt.doctor.nameAr).font(.subheadline.weight(.bold))
-                Text(appt.doctor.specialtyAr).font(.caption).foregroundStyle(AppTheme.primary)
-                Label(appt.dateAr + " · " + appt.timeAr, systemImage: "calendar")
+                Text(appt.displayName).font(.subheadline.weight(.bold))
+                Text(appt.displayReason).font(.caption).foregroundStyle(AppTheme.primary)
+                Label(appt.displayDate + " · " + appt.displayTime, systemImage: "calendar")
                     .font(.caption).foregroundStyle(AppTheme.textSecondary)
             }
             .frame(maxWidth: .infinity, alignment: isArabic ? .trailing : .leading)
-            Text(appt.displayStatus)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(appt.statusColor)
+            let color = appt.isUpcoming ? AppTheme.success : AppTheme.textSecondary.opacity(0.6)
+            Text(appt.isUpcoming ? L("قادم", "Предстоит") : L("مكتمل", "Завершён"))
+                .font(.caption.weight(.semibold)).foregroundStyle(color)
                 .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(appt.statusColor.opacity(0.1))
-                .clipShape(Capsule())
+                .background(color.opacity(0.1)).clipShape(Capsule())
         }
         .padding(16)
         .background(AppTheme.card)

@@ -35,8 +35,7 @@ private struct SpecialtyChip: View {
                     .foregroundStyle(item.color)
             }
             .frame(width: 60, height: 60)
-
-            Text(item.nameAr)
+            Text(item.displayName)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(AppTheme.textPrimary)
         }
@@ -128,8 +127,8 @@ private struct MedicationRow: View {
         HStack(spacing: 12) {
             checkmark
             VStack(alignment: .trailing, spacing: 3) {
-                Text(med.nameAr).font(.subheadline.weight(.semibold))
-                Text("\(med.doseAr) • \(med.timeAr)")
+                Text(med.displayName).font(.subheadline.weight(.semibold))
+                Text("\(med.displayDose) • \(med.displayTime)")
                     .font(.caption).foregroundStyle(AppTheme.textSecondary)
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -227,7 +226,8 @@ private struct DoctorCard: View {
                 .font(.caption.weight(.bold)).foregroundStyle(.white)
                 .padding(.horizontal, 14).padding(.vertical, 8)
                 .background(AppTheme.primary).clipShape(Capsule())
-            Text(doctor.nextSlotAr).font(.system(size: 10)).foregroundStyle(AppTheme.textSecondary)
+            Text(doctor.displayName == doctor.nameAr ? doctor.nextSlotAr : L(doctor.nextSlotAr, doctor.nextSlotAr))
+                .font(.system(size: 10)).foregroundStyle(AppTheme.textSecondary)
         }
     }
 }

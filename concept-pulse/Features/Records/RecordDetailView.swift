@@ -31,8 +31,8 @@ struct RecordDetailView: View {
         HStack(spacing: 14) {
             VStack(alignment: .trailing, spacing: 4) {
                 Text(record.displayTitle).font(.title3.weight(.bold))
-                Text(record.doctorAr).font(.subheadline).foregroundStyle(AppTheme.textSecondary)
-                Text(record.dateAr).font(.caption).foregroundStyle(AppTheme.textSecondary)
+                Text(record.displayDoctor).font(.subheadline).foregroundStyle(AppTheme.textSecondary)
+                Text(record.displayDate).font(.caption).foregroundStyle(AppTheme.textSecondary)
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
             ZStack {

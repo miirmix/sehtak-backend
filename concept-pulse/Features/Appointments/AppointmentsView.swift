@@ -97,8 +97,8 @@ struct AppointmentCard: View {
             statusBadge
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text(appt.dateAr).font(.caption.weight(.semibold))
-                Text(appt.timeAr).font(.caption2).foregroundStyle(AppTheme.textSecondary)
+                Text(appt.displayDate).font(.caption.weight(.semibold))
+                Text(appt.displayTime).font(.caption2).foregroundStyle(AppTheme.textSecondary)
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
@@ -116,9 +116,9 @@ struct AppointmentCard: View {
     private var doctorRow: some View {
         HStack(spacing: 12) {
             VStack(alignment: .trailing, spacing: 4) {
-                Text(appt.doctor.nameAr).font(.subheadline.weight(.bold))
-                Text(appt.doctor.specialtyAr).font(.caption).foregroundStyle(AppTheme.textSecondary)
-                Label(appt.locationAr, systemImage: "mappin.circle.fill")
+                Text(appt.doctor.displayName).font(.subheadline.weight(.bold))
+                Text(appt.doctor.displaySpecialty).font(.caption).foregroundStyle(AppTheme.textSecondary)
+                Label(appt.displayLocation, systemImage: "mappin.circle.fill")
                     .font(.caption2).foregroundStyle(AppTheme.textSecondary)
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
