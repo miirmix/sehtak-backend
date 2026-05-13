@@ -152,6 +152,7 @@ final class GigaChatProvider: AIProviderProtocol {
     // MARK: - Core HTTP Call
     private func callChat(messages: [[String: String]]) async throws -> String {
         guard let url = URL(string: GigaChatConfig.chatEndpoint) else {
+            NSLog("[GigaChat] Bad URL: \(GigaChatConfig.chatEndpoint)")
             throw URLError(.badURL)
         }
         var request = URLRequest(url: url)
@@ -165,51 +166,108 @@ final class GigaChatProvider: AIProviderProtocol {
             "temperature": 0.7,
             "max_tokens":  1024
         ]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        } catch {
+            NSLog("[GigaChat] Failed to serialize request body: \(error)")
+            throw error
+        }
+
         NSLog("[GigaChat] POST \(GigaChatConfig.chatEndpoint)")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            NSLog("[GigaChat] Network error: \(error)")
+            throw error
+        }
+
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        NSLog("[GigaChat] chat HTTP \(status), data=\(data.count) bytes")
+        NSLog("[GigaChat] HTTP \(status), bytes=\(data.count)")
 
         guard (200...299).contains(status) else {
-            NSLog("[GigaChat] non-2xx: \(String(data: data, encoding: .utf8) ?? "?")")
+            let bodyStr = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) ?? "?"
+            NSLog("[GigaChat] non-2xx body: \(bodyStr.prefix(300))")
             throw URLError(.badServerResponse)
         }
 
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choices = json["choices"] as? [[String: Any]],
-              let message = choices.first?["message"] as? [String: Any],
-              let content = message["content"] as? String else {
+        return try extractContent(from: data)
+    }
+
+    private func extractContent(from data: Data) throws -> String {
+        guard let raw = try? JSONSerialization.jsonObject(with: data) else {
+            let bodyStr = String(data: data, encoding: .utf8) ?? "?"
+            NSLog("[GigaChat] JSON parse failed. Raw: \(bodyStr.prefix(300))")
             throw URLError(.cannotParseResponse)
         }
+        guard let json = raw as? [String: Any] else {
+            NSLog("[GigaChat] Root is not a dict")
+            throw URLError(.cannotParseResponse)
+        }
+        guard let choices = json["choices"] as? [[String: Any]] else {
+            NSLog("[GigaChat] Missing 'choices'. Keys: \(json.keys.joined(separator: ","))")
+            throw URLError(.cannotParseResponse)
+        }
+        guard let firstChoice = choices.first else {
+            NSLog("[GigaChat] 'choices' array is empty")
+            throw URLError(.cannotParseResponse)
+        }
+        guard let message = firstChoice["message"] as? [String: Any] else {
+            NSLog("[GigaChat] Missing 'message' in choice: \(firstChoice.keys.joined(separator: ","))")
+            throw URLError(.cannotParseResponse)
+        }
+        guard let content = message["content"] as? String else {
+            NSLog("[GigaChat] Missing 'content'. Keys: \(message.keys.joined(separator: ","))")
+            throw URLError(.cannotParseResponse)
+        }
+        NSLog("[GigaChat] Got content (\(content.count) chars)")
         return content
     }
 
     // MARK: - Response Parsing
     private func parseTextReply(_ reply: String, query: String, language: AppLanguage) -> AIResponse {
-        // Try JSON extraction first (model might return structured JSON)
-        if let jsonStart = reply.range(of: "{"),
-           let jsonEnd = reply.range(of: "}", options: .backwards),
-           jsonStart.lowerBound < jsonEnd.upperBound {
-            let jsonStr = String(reply[jsonStart.lowerBound...jsonEnd.upperBound])
-            if let data = jsonStr.data(using: .utf8),
-               let dto = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                return buildAIResponse(from: dto, fallbackText: reply, language: language)
-            }
+        // Try structured JSON extraction (model may return JSON block)
+        if let dto = extractJSON(from: reply) {
+            return buildAIResponse(from: dto, fallbackText: reply, language: language)
         }
         // Plain text fallback
-        let doctors  = matchDoctors(specialtyKey: nil)
-        let urgency  = detectUrgency(in: reply)
-        let tags     = buildTags(urgency: urgency, specialty: nil, language: language)
-        let card     = AnalysisResult(
+        let urgency = detectUrgency(in: reply)
+        let tags    = buildTags(urgency: urgency, specialty: nil, language: language)
+        let card    = AnalysisResult(
             title: language == .arabic ? "تحليل الأعراض" : "Анализ симптомов",
             summary: reply,
             tags: tags,
             disclaimer: Loc.aiDisclaimer
         )
-        return AIResponse(text: reply, specialty: nil, suggestedDoctors: doctors,
+        return AIResponse(text: reply, specialty: nil, suggestedDoctors: [],
                           isEmergency: false, analysisCard: card)
+    }
+
+    /// Safely extract the first JSON object `{...}` from arbitrary text.
+    private func extractJSON(from text: String) -> [String: Any]? {
+        guard let startIdx = text.firstIndex(of: "{") else { return nil }
+        // Walk forward counting braces to find matching close
+        var depth = 0
+        var endIdx: String.Index? = nil
+        for idx in text[startIdx...].indices {
+            switch text[idx] {
+            case "{": depth += 1
+            case "}":
+                depth -= 1
+                if depth == 0 { endIdx = idx; break }
+            default: break
+            }
+            if depth == 0, endIdx != nil { break }
+        }
+        guard let end = endIdx else { return nil }
+        let jsonStr = String(text[startIdx...end])
+        guard let data = jsonStr.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return obj
     }
 
     private func buildAIResponse(from dto: [String: Any], fallbackText: String, language: AppLanguage) -> AIResponse {
@@ -234,11 +292,7 @@ final class GigaChatProvider: AIProviderProtocol {
     }
 
     private func parseImageReply(_ reply: String, language: AppLanguage) -> AIImageAnalysis {
-        guard let jsonStart = reply.range(of: "{"),
-              let jsonEnd = reply.range(of: "}", options: .backwards),
-              jsonStart.lowerBound < jsonEnd.upperBound,
-              let data = String(reply[jsonStart.lowerBound...jsonEnd.upperBound]).data(using: .utf8),
-              let dto = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        guard let dto = extractJSON(from: reply) else {
             return nonMedicalReject(language: language)
         }
         let isMedical = dto["isMedical"]  as? Bool   ?? false
