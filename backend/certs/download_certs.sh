@@ -1,189 +1,197 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────────────
-# download_certs.sh  v2
-# Downloads Russian Trusted Root CA + Sub CA and builds russian_ca_bundle.pem.
-# - Auto-detects PEM vs DER format before conversion.
-# - Falls back to mirror URL if primary fails.
-# - Validates each certificate with openssl after conversion.
-# - Fails clearly if a downloaded file is HTML or empty.
+# download_certs.sh  v3
+#
+# Builds russian_ca_bundle.pem from Russian Trusted Root CA + Sub CA.
+# Uses Python (guaranteed in the Railway/Render build env) for all
+# download and DER→PEM conversion work — avoids every shell/openssl quirk.
+#
+# If the bundle is already present and valid (committed to the repo),
+# this script validates it and exits 0 without re-downloading.
 # ──────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# ── Primary URLs (Gosuslugi CDN) ──────────────────────────────────────────────
-ROOT_URL_1="https://gu-st.ru/content/Other/doc/russian_trusted_root_ca.cer"
-SUB_URL_1="https://gu-st.ru/content/Other/doc/russian_trusted_sub_ca.cer"
-
-# ── Mirror URLs ───────────────────────────────────────────────────────────────
-ROOT_URL_2="https://www.gosuslugi.ru/crt/russian_trusted_root_ca.cer"
-SUB_URL_2="https://www.gosuslugi.ru/crt/russian_trusted_sub_ca.cer"
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
 log()  { echo "[certs] $*"; }
 info() { echo "[certs] ✅ $*"; }
 warn() { echo "[certs] ⚠️  $*"; }
 fail() { echo "[certs] ❌ ERROR: $*" >&2; exit 1; }
 
-# detect_format <file> → prints "PEM" or "DER"
-detect_format() {
-    local file="$1"
-    if grep -q "BEGIN CERTIFICATE" "$file" 2>/dev/null; then
-        echo "PEM"
+BUNDLE="russian_ca_bundle.pem"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# If a pre-committed bundle exists, validate it and exit early.
+# ──────────────────────────────────────────────────────────────────────────────
+if [ -f "$BUNDLE" ]; then
+    COUNT=$(grep -c "BEGIN CERTIFICATE" "$BUNDLE" 2>/dev/null || echo "0")
+    if [ "$COUNT" -ge 2 ]; then
+        info "Pre-committed $BUNDLE found with $COUNT certificate(s) — skipping download."
+        python3 -c "
+import ssl, os
+ctx = ssl.create_default_context()
+try:
+    ctx.load_verify_locations('$BUNDLE')
+    print('[certs] ✅ Python ssl.create_default_context validated bundle OK')
+except Exception as e:
+    print(f'[certs] ❌ Python ssl validation failed: {e}')
+    exit(1)
+"
+        exit 0
     else
-        echo "DER"
+        warn "Existing $BUNDLE has only $COUNT cert(s) — will re-download."
     fi
-}
+fi
 
-# validate_download <file> <label>
-# Fails if file is empty or starts with '<' (HTML page).
-validate_download() {
-    local file="$1"
-    local label="$2"
-    local size
-    size=$(wc -c < "$file")
-
-    if [ "$size" -eq 0 ]; then
-        fail "Downloaded '$label' is empty (0 bytes)."
-    fi
-
-    # Read first byte — if it is '<' the server returned an HTML page.
-    local first_char
-    first_char=$(dd if="$file" bs=1 count=1 2>/dev/null | cat)
-    if [ "$first_char" = "<" ]; then
-        fail "Downloaded '$label' appears to be an HTML page (starts with '<'). The URL may have changed or redirected."
-    fi
-
-    log "$label: ${size} bytes downloaded — looks like binary/PEM data."
-}
-
-# download_cert <out_file> <url1> <url2> <label>
-# Tries url1 first; falls back to url2.
-download_cert() {
-    local out_file="$1"
-    local url1="$2"
-    local url2="$3"
-    local label="$4"
-
-    log "Downloading $label ..."
-    log "  Primary: $url1"
-
-    if curl -fsSL --max-time 30 --retry 2 -o "$out_file" "$url1" 2>/dev/null; then
-        if validate_download "$out_file" "$label (primary)" 2>/dev/null; then
-            info "$label: downloaded from primary URL."
-            return 0
-        fi
-    fi
-
-    warn "$label: primary URL failed or returned invalid content. Trying mirror ..."
-    log "  Mirror: $url2"
-
-    if curl -fsSL --max-time 30 --retry 2 -o "$out_file" "$url2" 2>/dev/null; then
-        validate_download "$out_file" "$label (mirror)"
-        info "$label: downloaded from mirror URL."
-        return 0
-    fi
-
-    fail "$label: BOTH download URLs failed. Check network connectivity and URL availability."
-}
-
-# to_pem <in_file> <out_pem> <label>
-# Converts DER→PEM if needed, then validates with openssl.
-to_pem() {
-    local in_file="$1"
-    local out_pem="$2"
-    local label="$3"
-
-    local fmt
-    fmt=$(detect_format "$in_file")
-    log "$label: detected format = $fmt"
-
-    if [ "$fmt" = "PEM" ]; then
-        cp "$in_file" "$out_pem"
-        info "$label: already PEM — copied directly."
-    else
-        log "$label: converting DER → PEM ..."
-        if ! openssl x509 -inform DER -in "$in_file" -out "$out_pem" 2>&1; then
-            # If DER failed but file might actually be PEM, try PEM anyway
-            warn "$label: DER conversion failed, attempting PEM parse ..."
-            if ! openssl x509 -inform PEM -in "$in_file" -out "$out_pem" 2>&1; then
-                fail "$label: unable to parse as DER or PEM. File may be corrupt or wrong format."
-            fi
-            info "$label: parsed as PEM (despite no BEGIN marker)."
-        else
-            info "$label: DER → PEM conversion succeeded."
-        fi
-    fi
-
-    # Final openssl validation
-    log "$label: validating converted PEM ..."
-    if ! openssl x509 -in "$out_pem" -noout 2>/dev/null; then
-        fail "$label: produced PEM failed openssl validation. Certificate is invalid."
-    fi
-
-    # Print subject + validity for confirmation in build logs
-    openssl x509 -in "$out_pem" -noout -subject -dates 2>/dev/null | sed "s/^/  [$label] /"
-    info "$label: PEM validated successfully."
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Main
-# ─────────────────────────────────────────────────────────────────────────────
-
-log "=== Russian Trusted CA bundle builder v2 ==="
+# ──────────────────────────────────────────────────────────────────────────────
+# Download and convert via Python — handles DER/PEM transparently.
+# ──────────────────────────────────────────────────────────────────────────────
+log "=== Russian Trusted CA bundle builder v3 ==="
 log "Working directory: $SCRIPT_DIR"
-echo ""
 
-# ── Step 1: Download ──────────────────────────────────────────────────────────
-download_cert \
-    "russian_trusted_root_ca.cer" \
-    "$ROOT_URL_1" "$ROOT_URL_2" \
-    "Root CA"
+python3 - << 'PYEOF'
+import sys
+import ssl
+import urllib.request
+import urllib.error
+from pathlib import Path
 
-download_cert \
-    "russian_trusted_sub_ca.cer" \
-    "$SUB_URL_1" "$SUB_URL_2" \
-    "Sub CA"
+SCRIPT_DIR = Path(__file__).parent if "__file__" in dir() else Path(".")
 
-echo ""
+# Certificate sources: (label, [url1, url2, ...])
+CERT_SOURCES = [
+    (
+        "Russian Trusted Root CA",
+        [
+            "https://gu-st.ru/content/Other/doc/russian_trusted_root_ca.cer",
+            "https://gu-st.ru/content/lending/russian_trusted_root_ca_pem.crt",
+            "https://www.gosuslugi.ru/crt/russian_trusted_root_ca.cer",
+        ],
+    ),
+    (
+        "Russian Trusted Sub CA",
+        [
+            "https://gu-st.ru/content/Other/doc/russian_trusted_sub_ca.cer",
+            "https://gu-st.ru/content/lending/russian_trusted_sub_ca_pem.crt",
+            "https://www.gosuslugi.ru/crt/russian_trusted_sub_ca.cer",
+        ],
+    ),
+]
 
-# ── Step 2: Convert to PEM ────────────────────────────────────────────────────
-to_pem "russian_trusted_root_ca.cer" "russian_trusted_root_ca.pem" "Root CA"
-to_pem "russian_trusted_sub_ca.cer"  "russian_trusted_sub_ca.pem"  "Sub CA"
+def log(msg):   print(f"[certs] {msg}", flush=True)
+def info(msg):  print(f"[certs] ✅ {msg}", flush=True)
+def warn(msg):  print(f"[certs] ⚠️  {msg}", flush=True)
+def error(msg): print(f"[certs] ❌ ERROR: {msg}", file=sys.stderr, flush=True)
 
-echo ""
+def download(url: str, timeout: int = 30) -> bytes:
+    """Download URL, no SSL verify needed for CA cert download itself."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Mozilla/5.0 (compatible; cert-downloader/3.0)"},
+    )
+    with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
+        return r.read()
 
-# ── Step 3: Build bundle ──────────────────────────────────────────────────────
-log "Concatenating into russian_ca_bundle.pem ..."
-cat russian_trusted_root_ca.pem russian_trusted_sub_ca.pem > russian_ca_bundle.pem
+def to_pem(data: bytes, label: str) -> str:
+    """Convert DER or PEM bytes to a clean PEM string."""
+    from cryptography import x509
+    from cryptography.hazmat.primitives import serialization
 
-CERT_COUNT=$(grep -c "BEGIN CERTIFICATE" russian_ca_bundle.pem 2>/dev/null || echo "0")
-log "Certificates in bundle: $CERT_COUNT"
+    # Try PEM first (already ASCII-armored)
+    if b"BEGIN CERTIFICATE" in data:
+        log(f"{label}: detected PEM format")
+        # Validate by parsing
+        try:
+            cert = x509.load_pem_x509_certificate(data)
+            pem_str = cert.public_bytes(serialization.Encoding.PEM).decode()
+            log(f"{label}: subject = {cert.subject.rfc4514_string()}")
+            log(f"{label}: not_before = {cert.not_valid_before_utc}")
+            log(f"{label}: not_after  = {cert.not_valid_after_utc}")
+            return pem_str
+        except Exception as e:
+            warn(f"{label}: PEM parse failed ({e}), trying DER ...")
 
-if [ "$CERT_COUNT" -lt 2 ]; then
-    fail "Bundle contains only $CERT_COUNT certificate(s) — expected at least 2."
-fi
+    # Try DER
+    try:
+        cert = x509.load_der_x509_certificate(data)
+        pem_str = cert.public_bytes(serialization.Encoding.PEM).decode()
+        log(f"{label}: detected DER format — converted to PEM")
+        log(f"{label}: subject = {cert.subject.rfc4514_string()}")
+        log(f"{label}: not_before = {cert.not_valid_before_utc}")
+        log(f"{label}: not_after  = {cert.not_valid_after_utc}")
+        return pem_str
+    except Exception as e:
+        raise ValueError(f"Cannot parse {label} as DER or PEM: {e}")
 
-info "russian_ca_bundle.pem built with $CERT_COUNT certificates."
-ls -lh russian_ca_bundle.pem
+# Check if cryptography package is available; install if missing
+try:
+    from cryptography import x509
+    from cryptography.hazmat.primitives import serialization
+except ImportError:
+    log("cryptography package not installed — installing ...")
+    import subprocess
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "cryptography", "-q"])
+    from cryptography import x509
+    from cryptography.hazmat.primitives import serialization
 
-echo ""
+pem_parts = []
 
-# ── Step 4: Verify bundle with openssl ───────────────────────────────────────
-log "Running openssl verify on Sub CA against Root CA ..."
-if openssl verify -CAfile russian_ca_bundle.pem russian_trusted_sub_ca.pem 2>&1; then
-    info "openssl verify passed — bundle is valid."
-else
-    warn "openssl verify returned non-zero — this may be OK if the sub CA is self-signed."
-fi
+for label, urls in CERT_SOURCES:
+    data = None
+    for url in urls:
+        log(f"Trying {url} ...")
+        try:
+            data = download(url)
+            if len(data) < 100:
+                warn(f"Response too small ({len(data)} bytes) — skipping")
+                data = None
+                continue
+            if data[:1] in (b"<", b"{"):
+                warn(f"Response looks like HTML/JSON ({data[:40]!r}) — skipping")
+                data = None
+                continue
+            info(f"{label}: downloaded {len(data)} bytes from {url}")
+            break
+        except Exception as e:
+            warn(f"Download failed: {e}")
+            data = None
 
-echo ""
+    if data is None:
+        error(f"All URLs failed for {label}.")
+        sys.exit(1)
 
-# ── Step 5: Cleanup ───────────────────────────────────────────────────────────
-rm -f russian_trusted_root_ca.cer russian_trusted_sub_ca.cer
-log "Cleaned up intermediate .cer files."
-log "=== Done ==="
+    try:
+        pem_str = to_pem(data, label)
+        pem_parts.append((label, pem_str))
+        info(f"{label}: converted to PEM OK")
+    except Exception as e:
+        error(f"PEM conversion failed for {label}: {e}")
+        sys.exit(1)
+
+# Write bundle
+bundle_path = Path("russian_ca_bundle.pem")
+with open(bundle_path, "w") as f:
+    for label, pem_str in pem_parts:
+        f.write(f"# {label}\n")
+        f.write(pem_str)
+        f.write("\n")
+
+cert_count = bundle_path.read_text().count("BEGIN CERTIFICATE")
+info(f"Bundle written: {bundle_path} ({bundle_path.stat().st_size} bytes, {cert_count} certs)")
+
+# Final Python SSL validation
+import ssl as ssl_mod
+ctx = ssl_mod.create_default_context()
+try:
+    ctx.load_verify_locations(str(bundle_path))
+    info("Python ssl.create_default_context() validated bundle — READY")
+except Exception as e:
+    error(f"Python ssl validation failed: {e}")
+    sys.exit(1)
+
+print("[certs] === Done ===", flush=True)
+PYEOF
