@@ -114,13 +114,14 @@ struct BookingConfirmView: View {
     private var confirmButton: some View {
         Button {
             let appt = Appointment(
-                doctor: Doctor(nameAr: doctor.nameAr, specialtyAr: doctor.specialtyAr,
-                               cityAr: doctor.cityAr, rating: doctor.rating,
-                               reviews: doctor.reviews, yearsExp: doctor.yearsExp,
-                               nextSlotAr: slot, avatarColor: doctor.avatarColor,
-                               initials: doctor.initials),
-                dateAr: day.dateAr, timeAr: slot,
-                locationAr: doctor.addressAr, isUpcoming: true
+                doctor: Doctor(nameAr: doctor.nameAr, nameRu: doctor.nameRu,
+                               specialtyAr: doctor.specialtyAr, specialtyRu: doctor.specialtyRu,
+                               cityAr: doctor.cityAr, cityRu: doctor.cityRu,
+                               rating: doctor.rating, reviews: doctor.reviews, yearsExp: doctor.yearsExp,
+                               nextSlotAr: slot, nextSlotRu: slot,
+                               avatarColor: doctor.avatarColor, initials: doctor.initials),
+                dateAr: day.dateAr, dateRu: day.dateRu, timeAr: slot, timeRu: slot,
+                locationAr: doctor.addressAr, locationRu: doctor.addressAr, isUpcoming: true
             )
             appState.addAppointment(appt)
             withAnimation { isConfirmed = true }

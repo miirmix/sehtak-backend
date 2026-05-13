@@ -226,7 +226,7 @@ private struct DoctorCard: View {
                 .font(.caption.weight(.bold)).foregroundStyle(.white)
                 .padding(.horizontal, 14).padding(.vertical, 8)
                 .background(AppTheme.primary).clipShape(Capsule())
-            Text(doctor.displayName == doctor.nameAr ? doctor.nextSlotAr : L(doctor.nextSlotAr, doctor.nextSlotAr))
+            Text(doctor.displayNextSlot)
                 .font(.system(size: 10)).foregroundStyle(AppTheme.textSecondary)
         }
     }

@@ -1,8 +1,8 @@
 import SwiftUI
 
-// MARK: - Localization helper
+// MARK: - Localization helper (named loc() to avoid clash with enum L in AppTheme)
 
-func L(_ ar: String, _ ru: String) -> String {
+func loc(_ ar: String, _ ru: String) -> String {
     Loc.lang == .arabic ? ar : ru
 }
 
@@ -14,7 +14,7 @@ struct Specialty: Identifiable, Hashable {
     let nameRu: String
     let icon: String
     let color: Color
-    var displayName: String { L(nameAr, nameRu) }
+    var displayName: String { loc(nameAr, nameRu) }
 }
 
 // MARK: - Doctor (basic, for appointments)
@@ -35,10 +35,10 @@ struct Doctor: Identifiable, Hashable {
     let avatarColor: Color
     let initials: String
 
-    var displayName: String      { L(nameAr, nameRu) }
-    var displaySpecialty: String { L(specialtyAr, specialtyRu) }
-    var displayCity: String      { L(cityAr, cityRu) }
-    var displayNextSlot: String  { L(nextSlotAr, nextSlotRu) }
+    var displayName: String      { loc(nameAr, nameRu) }
+    var displaySpecialty: String { loc(specialtyAr, specialtyRu) }
+    var displayCity: String      { loc(cityAr, cityRu) }
+    var displayNextSlot: String  { loc(nextSlotAr, nextSlotRu) }
 }
 
 // MARK: - Appointment
@@ -54,9 +54,9 @@ struct Appointment: Identifiable {
     let locationRu: String
     let isUpcoming: Bool
 
-    var displayDate: String     { L(dateAr, dateRu) }
-    var displayTime: String     { L(timeAr, timeRu) }
-    var displayLocation: String { L(locationAr, locationRu) }
+    var displayDate: String     { loc(dateAr, dateRu) }
+    var displayTime: String     { loc(timeAr, timeRu) }
+    var displayLocation: String { loc(locationAr, locationRu) }
 }
 
 // MARK: - Medication
@@ -71,9 +71,9 @@ struct Medication: Identifiable {
     let timeRu: String
     let taken: Bool
 
-    var displayName: String { L(nameAr, nameRu) }
-    var displayDose: String { L(doseAr, doseRu) }
-    var displayTime: String { L(timeAr, timeRu) }
+    var displayName: String { loc(nameAr, nameRu) }
+    var displayDose: String { loc(doseAr, doseRu) }
+    var displayTime: String { loc(timeAr, timeRu) }
 }
 
 // MARK: - Patient (for doctor appointments)
@@ -92,10 +92,10 @@ struct PatientAppointment: Identifiable {
     let avatarColor: Color
     let initials: String
 
-    var displayName: String   { L(patientNameAr, patientNameRu) }
-    var displayDate: String   { L(dateAr, dateRu) }
-    var displayTime: String   { L(timeAr, timeRu) }
-    var displayReason: String { L(reasonAr, reasonRu) }
+    var displayName: String   { loc(patientNameAr, patientNameRu) }
+    var displayDate: String   { loc(dateAr, dateRu) }
+    var displayTime: String   { loc(timeAr, timeRu) }
+    var displayReason: String { loc(reasonAr, reasonRu) }
 }
 
 // MARK: - Sample Data

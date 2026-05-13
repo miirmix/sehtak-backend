@@ -158,8 +158,11 @@ struct AddRecordSheet: View {
                         let rec = MedicalRecord(
                             type: selectedType, titleAr: title, titleRu: title,
                             dateAr: Loc.lang == .arabic ? "اليوم" : "Сегодня",
+                            dateRu: Loc.lang == .arabic ? "اليوم" : "Сегодня",
                             doctorAr: Loc.lang == .arabic ? "أضفته بنفسك" : "Добавлено вами",
-                            summary: notes.isEmpty ? (Loc.lang == .arabic ? "لا توجد ملاحظات" : "Нет заметок") : notes,
+                            doctorRu: Loc.lang == .arabic ? "أضفته بنفسك" : "Добавлено вами",
+                            summaryAr: notes.isEmpty ? (Loc.lang == .arabic ? "لا توجد ملاحظات" : "Нет заметок") : notes,
+                            summaryRu: notes.isEmpty ? "Нет заметок" : notes,
                             values: [], date: Date()
                         )
                         onSave(rec)

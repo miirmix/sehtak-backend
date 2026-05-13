@@ -103,8 +103,8 @@ struct HealthSummaryCard: View {
     private var content: some View {
         HStack(alignment: .top) {
             VStack(alignment: .trailing, spacing: 10) {
-                Text(L("ملخص صحتك", "Сводка здоровья")).font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.85))
-                Text(L("ممتاز 💚", "Отлично 💚")).font(.title.weight(.bold)).foregroundStyle(.white)
+                Text(loc("ملخص صحتك", "Сводка здоровья")).font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.85))
+                Text(loc("ممتاز 💚", "Отлично 💚")).font(.title.weight(.bold)).foregroundStyle(.white)
                 statRow
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -114,9 +114,9 @@ struct HealthSummaryCard: View {
 
     private var statRow: some View {
         HStack(spacing: 10) {
-            statPill(icon: "heart.fill",   value: "٧٢",     unit: L("نبضة", "уд/мин"))
-            statPill(icon: "drop.fill",    value: "١١٠/٧٠", unit: L("ضغط", "давл."))
-            statPill(icon: "figure.walk",  value: L("٦٫٢ك", "6.2к"), unit: L("خطوة", "шагов"))
+            statPill(icon: "heart.fill",   value: "٧٢",     unit: loc("نبضة", "уд/мин"))
+            statPill(icon: "drop.fill",    value: "١١٠/٧٠", unit: loc("ضغط", "давл."))
+            statPill(icon: "figure.walk",  value: loc("٦٫٢ك", "6.2к"), unit: loc("خطوة", "шагов"))
         }
     }
 
@@ -156,7 +156,7 @@ struct UpcomingAppointmentCard: View {
     private var header: some View {
         HStack {
             Text(L.upcoming).font(.headline).frame(maxWidth: .infinity, alignment: .trailing)
-            Label(L("بعد يومين", "Через 2 дня"), systemImage: "clock.fill")
+            Label(loc("بعد يومين", "Через 2 дня"), systemImage: "clock.fill")
                 .font(.caption.weight(.semibold)).foregroundStyle(AppTheme.primary)
                 .padding(.horizontal, 10).padding(.vertical, 5)
                 .background(AppTheme.primarySoft).clipShape(Capsule())

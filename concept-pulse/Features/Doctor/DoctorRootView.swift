@@ -81,7 +81,7 @@ struct DoctorPatientApptCard: View {
             }
             .frame(maxWidth: .infinity, alignment: isArabic ? .trailing : .leading)
             let color = appt.isUpcoming ? AppTheme.success : AppTheme.textSecondary.opacity(0.6)
-            Text(appt.isUpcoming ? L("قادم", "Предстоит") : L("مكتمل", "Завершён"))
+            Text(appt.isUpcoming ? loc("قادم", "Предстоит") : loc("مكتمل", "Завершён"))
                 .font(.caption.weight(.semibold)).foregroundStyle(color)
                 .padding(.horizontal, 10).padding(.vertical, 5)
                 .background(color.opacity(0.1)).clipShape(Capsule())

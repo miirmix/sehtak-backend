@@ -54,12 +54,12 @@ struct MedicalRecordsView: View {
     private var patientBanner: some View {
         HStack(spacing: 14) {
             VStack(alignment: .trailing, spacing: 4) {
-                Text(appState.userProfile.name.isEmpty ? L("محمد أحمد", "Мухаммад Ахмад") : appState.userProfile.name)
+                Text(appState.userProfile.name.isEmpty ? loc("محمد أحمد", "Мухаммад Ахмад") : appState.userProfile.name)
                     .font(.subheadline.weight(.bold))
                 HStack(spacing: 8) {
-                    Text(L("٣٥ سنة", "35 лет")).font(.caption).foregroundStyle(AppTheme.textSecondary)
+                    Text(loc("٣٥ سنة", "35 лет")).font(.caption).foregroundStyle(AppTheme.textSecondary)
                     Text("•").font(.caption2).foregroundStyle(AppTheme.textSecondary)
-                    Text(L("فصيلة الدم: B+", "Группа крови: B+"))
+                    Text(loc("فصيلة الدم: B+", "Группа крови: B+"))
                         .font(.caption).foregroundStyle(AppTheme.primary)
                 }
             }

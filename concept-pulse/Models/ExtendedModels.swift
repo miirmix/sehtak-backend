@@ -25,9 +25,10 @@ struct DoctorDetail: Identifiable, Hashable {
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
     static func == (lhs: DoctorDetail, rhs: DoctorDetail) -> Bool { lhs.id == rhs.id }
 
-    var displayName: String      { L(nameAr, nameRu) }
-    var displaySpecialty: String { L(specialtyAr, specialtyRu) }
-    var displayCity: String      { L(cityAr, cityRu) }
+    var displayName: String      { loc(nameAr, nameRu) }
+    var displaySpecialty: String { loc(specialtyAr, specialtyRu) }
+    var displayCity: String      { loc(cityAr, cityRu) }
+    var displayNextSlot: String  { nextSlotAr }
 }
 
 struct AvailableDay: Identifiable {
@@ -36,7 +37,7 @@ struct AvailableDay: Identifiable {
     let dateRu: String
     let dateValue: Date
     let slots: [String]
-    var displayDate: String { L(dateAr, dateRu) }
+    var displayDate: String { loc(dateAr, dateRu) }
 }
 
 // MARK: - Medical Record
@@ -55,10 +56,10 @@ struct MedicalRecord: Identifiable {
     let values: [LabValue]
     let date: Date
 
-    var summary: String       { L(summaryAr, summaryRu) }
-    var displayTitle: String  { L(titleAr, titleRu) }
-    var displayDate: String   { L(dateAr, dateRu) }
-    var displayDoctor: String { L(doctorAr, doctorRu) }
+    var summary: String       { loc(summaryAr, summaryRu) }
+    var displayTitle: String  { loc(titleAr, titleRu) }
+    var displayDate: String   { loc(dateAr, dateRu) }
+    var displayDoctor: String { loc(doctorAr, doctorRu) }
 }
 
 // MARK: - Record Types
@@ -103,7 +104,7 @@ extension Appointment {
     }
     var statusAr: String { isUpcoming ? "قادم" : "مكتمل" }
     var statusRu: String { isUpcoming ? "Предстоит" : "Завершён" }
-    var displayStatus: String { L(statusAr, statusRu) }
+    var displayStatus: String { loc(statusAr, statusRu) }
 }
 
 // MARK: - Sample Data Extended
@@ -220,10 +221,10 @@ extension SampleData {
             summaryAr: "نتائج التحليل في المستوى الطبيعي عموماً مع ملاحظة انخفاض طفيف في الهيموجلوبين.",
             summaryRu: "Результаты анализа в целом в норме, отмечается небольшое снижение гемоглобина.",
             values: [
-                LabValue(name: L("الهيموجلوبين", "Гемоглобин"),     value: "11.2", unit: "g/dL",    normalRange: "12–16",  isAbnormal: true),
-                LabValue(name: L("خلايا الدم البيضاء", "Лейкоциты"), value: "7.2",  unit: "×10³/μL", normalRange: "4–11",   isAbnormal: false),
-                LabValue(name: L("الصفائح الدموية", "Тромбоциты"),   value: "245",  unit: "×10³/μL", normalRange: "150–400", isAbnormal: false),
-                LabValue(name: L("السكر الصيامي", "Глюкоза натощак"),value: "95",   unit: "mg/dL",  normalRange: "70–100",  isAbnormal: false)
+                LabValue(name: loc("الهيموجلوبين", "Гемоглобин"),     value: "11.2", unit: "g/dL",    normalRange: "12–16",  isAbnormal: true),
+                LabValue(name: loc("خلايا الدم البيضاء", "Лейкоциты"), value: "7.2",  unit: "×10³/μL", normalRange: "4–11",   isAbnormal: false),
+                LabValue(name: loc("الصفائح الدموية", "Тромбоциты"),   value: "245",  unit: "×10³/μL", normalRange: "150–400", isAbnormal: false),
+                LabValue(name: loc("السكر الصيامي", "Глюкоза натощак"),value: "95",   unit: "mg/dL",  normalRange: "70–100",  isAbnormal: false)
             ],
             date: Date().addingTimeInterval(-259200)
         ),
@@ -235,8 +236,8 @@ extension SampleData {
             summaryAr: "إيقاع جيبي طبيعي. معدل ضربات القلب ٧٢ في الدقيقة. لا يوجد تغييرات إقفارية.",
             summaryRu: "Синусовый ритм. Частота сердечных сокращений 72 уд/мин. Ишемических изменений нет.",
             values: [
-                LabValue(name: L("معدل ضربات القلب", "ЧСС"), value: "72",   unit: "bpm",      normalRange: "60–100",   isAbnormal: false),
-                LabValue(name: "QRS",                         value: "0.08", unit: L("ثانية", "с"), normalRange: "0.06–0.10", isAbnormal: false)
+                LabValue(name: loc("معدل ضربات القلب", "ЧСС"), value: "72",   unit: "bpm",      normalRange: "60–100",   isAbnormal: false),
+                LabValue(name: "QRS",                           value: "0.08", unit: loc("ثانية", "с"), normalRange: "0.06–0.10", isAbnormal: false)
             ],
             date: Date().addingTimeInterval(-691200)
         ),
@@ -258,8 +259,8 @@ extension SampleData {
             summaryAr: "ضغط الدم ١٢٠/٨٠. حالة مستقرة. يُنصح بالمتابعة كل ٣ أشهر والحفاظ على النشاط البدني.",
             summaryRu: "Давление 120/80. Состояние стабильное. Рекомендуется наблюдение каждые 3 месяца.",
             values: [
-                LabValue(name: L("ضغط الدم", "Давление"), value: "120/80", unit: "mmHg", normalRange: "<130/80",         isAbnormal: false),
-                LabValue(name: L("الوزن", "Вес"),          value: "82",     unit: "kg",   normalRange: L("BMI طبيعي", "ИМТ норма"), isAbnormal: false)
+                LabValue(name: loc("ضغط الدم", "Давление"), value: "120/80", unit: "mmHg", normalRange: "<130/80",           isAbnormal: false),
+                LabValue(name: loc("الوزن", "Вес"),          value: "82",     unit: "kg",   normalRange: loc("BMI طبيعي", "ИМТ норма"), isAbnormal: false)
             ],
             date: Date().addingTimeInterval(-4665600)
         )
