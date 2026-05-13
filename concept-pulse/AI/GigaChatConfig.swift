@@ -21,7 +21,7 @@ enum GigaChatConfig {
            !override.isEmpty, override != "$(GIGACHAT_PROXY_URL)" {
             return override
         }
-        return "https://placeholder.example.com"   // ← replace after deploying backend
+        return "https://sehtak-backend-production.up.railway.app"
     }()
 
     // Derived endpoints
