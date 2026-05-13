@@ -10,6 +10,9 @@ struct AssistantView: View {
     @State private var selectedItem: PhotosPickerItem?
     @State private var showQuickPrompts = true
     @State private var navigateToDoctorDetail: DoctorDetail?
+    @State private var showBackendTest = false
+    @State private var backendTestResult = ""
+    @State private var isRunningTest = false
     @FocusState private var inputFocused: Bool
 
     private let aiProvider: AIProviderProtocol = AIProviderFactory.make()
@@ -29,10 +32,14 @@ struct AssistantView: View {
             .navigationDestination(item: $navigateToDoctorDetail) { doc in
                 DoctorProfileView(doctor: doc)
             }
+            .sheet(isPresented: $showBackendTest) {
+                BackendTestSheet(result: backendTestResult, isRunning: isRunningTest) {
+                    runBackendTest()
+                }
+            }
         }
         .onAppear {
             if messages.isEmpty { resetChat() }
-            // Fire diagnostic once to surface GigaChat config issues in logs
             Task {
                 if let provider = aiProvider as? GigaChatProvider {
                     await provider.runDiagnostic()
@@ -41,6 +48,26 @@ struct AssistantView: View {
         }
         .onChange(of: appState.language) { _, _ in resetChat() }
         .onChange(of: selectedItem) { _, item in handlePhotoSelection(item) }
+    }
+
+    private func runBackendTest() {
+        guard !isRunningTest else { return }
+        isRunningTest = true
+        backendTestResult = "⏳ Running test…"
+        Task {
+            if let provider = aiProvider as? GigaChatProvider {
+                let result = await provider.runFullBackendTest()
+                await MainActor.run {
+                    backendTestResult = result
+                    isRunningTest = false
+                }
+            } else {
+                await MainActor.run {
+                    backendTestResult = "ℹ️ GigaChatProvider not active"
+                    isRunningTest = false
+                }
+            }
+        }
     }
 
     // MARK: - Chat List
@@ -144,12 +171,22 @@ struct AssistantView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                withAnimation { resetChat() }
-            } label: {
-                Image(systemName: "arrow.counterclockwise")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(AppTheme.primary)
+            HStack(spacing: 12) {
+                Button {
+                    showBackendTest = true
+                    if backendTestResult.isEmpty { runBackendTest() }
+                } label: {
+                    Image(systemName: "network")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Color.orange)
+                }
+                Button {
+                    withAnimation { resetChat() }
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(AppTheme.primary)
+                }
             }
         }
         ToolbarItem(placement: .topBarLeading) {
@@ -243,6 +280,48 @@ struct AssistantView: View {
         } else if let result = analysis.result {
             let msg = ChatMessage(sender: .assistant, content: .analysisResult(result), timestamp: Date())
             withAnimation { messages.append(msg) }
+        }
+    }
+}
+
+// MARK: - Backend Test Sheet
+struct BackendTestSheet: View {
+    let result: String
+    let isRunning: Bool
+    let onRerun: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if isRunning {
+                        HStack(spacing: 12) {
+                            ProgressView()
+                            Text("Connecting to GigaChat backend…")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 40)
+                    } else {
+                        Text(result)
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(.primary)
+                            .padding()
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    Spacer()
+                }
+                .padding()
+            }
+            .navigationTitle("🔬 GigaChat Backend Test")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Re-run") { onRerun() }
+                        .disabled(isRunning)
+                }
+            }
         }
     }
 }

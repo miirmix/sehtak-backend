@@ -25,6 +25,75 @@ final class GigaChatProvider: AIProviderProtocol {
         }
     }
 
+    // MARK: Full Backend Test (visible in UI)
+    /// Calls the gigachat-test edge function (no JWT required) and returns a human-readable report.
+    func runFullBackendTest() async -> String {
+        let urlString = "https://cjhffbqnajxacrvexxca.supabase.co/functions/v1/gigachat-test"
+        NSLog("[GigaChat] === Full backend test ===")
+        guard let url = URL(string: urlString) else { return "❌ Bad URL" }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.timeoutInterval = 30
+        do {
+            let (data, response) = try await URLSession.shared.data(for: req)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            NSLog("[GigaChat] test HTTP status=%d", status)
+            guard let raw = String(data: data, encoding: .utf8) else { return "❌ No data" }
+            NSLog("[GigaChat] test raw: %@", String(raw.prefix(800)))
+            // Parse and format nicely
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return "HTTP \(status)\n\n\(raw.prefix(600))"
+            }
+            return formatTestResult(json)
+        } catch {
+            NSLog("[GigaChat] test error: %@", error.localizedDescription)
+            return "❌ Network error: \(error.localizedDescription)"
+        }
+    }
+
+    private func formatTestResult(_ j: [String: Any]) -> String {
+        var lines: [String] = []
+        lines.append("🕐 \(j["timestamp"] as? String ?? "-")")
+        lines.append("")
+        let hasKey = j["hasAuthKey"] as? Bool ?? false
+        lines.append("🔑 Auth Key: \(hasKey ? "✅ Present" : "❌ Missing")")
+        lines.append("   Hint: \(j["keyHint"] as? String ?? "-")")
+        lines.append("   Scope: \(j["scope"] as? String ?? "-")")
+        lines.append("")
+        let oauthOk = j["oauthOk"] as? Bool ?? false
+        let oauthStatus = j["oauthStatus"]
+        lines.append("🔐 OAuth: \(oauthOk ? "✅ OK" : "❌ Failed")")
+        lines.append("   Status: \(oauthStatus ?? "-")")
+        if let err = j["oauthError"] as? String {
+            lines.append("   Error: \(err.prefix(200))")
+        }
+        if let tokenLen = j["accessTokenLength"] as? Int {
+            lines.append("   Token length: \(tokenLen) chars")
+        }
+        if let exp = j["tokenExpiresAt"] as? String {
+            lines.append("   Expires: \(exp)")
+        }
+        lines.append("")
+        let chatOk = j["chatOk"] as? Bool ?? false
+        let chatStatus = j["chatStatus"]
+        lines.append("💬 Chat: \(chatOk ? "✅ OK" : "❌ Failed")")
+        lines.append("   Status: \(chatStatus ?? "-")")
+        if let model = j["modelUsed"] as? String {
+            lines.append("   Model: \(model)")
+        }
+        if let reply = j["chatReplyPreview"] as? String {
+            lines.append("   Reply: \(reply.prefix(150))")
+        }
+        if let err = j["chatError"] as? String {
+            lines.append("   Error: \(err.prefix(200))")
+        }
+        if let code = j["errorCode"] as? String {
+            lines.append("")
+            lines.append("⚠️ Error code: \(code)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     // MARK: Text Query
     func generateMedicalResponse(query: String, language: AppLanguage) async -> AIResponse {
         // Emergency check runs locally first — no network round-trip for safety
