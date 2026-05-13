@@ -1,14 +1,38 @@
+# macOS
+.DS_Store
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
+*.pyd
+.venv/
+venv/
+backend/.venv/
+
+# Environment variables / secrets
 .env
 .env.*
-venv/
-.venv/
+!.env.example
 
-# Certificate files — DER/PEM intermediates (bundle IS committed)
-certs/*.cer
-certs/*.crt
-certs/russian_trusted_root_ca.pem
-certs/russian_trusted_sub_ca.pem
-# russian_ca_bundle.pem IS tracked (public root CA, not a secret)
+# Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.moved-aside
+*.xcuserdatad/
+*.xcscmblueprint
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# CocoaPods
+Pods/
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
