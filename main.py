@@ -37,21 +37,65 @@ CHAT_URL  = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
 _token_cache: dict[str, object] = {"access_token": None, "expires_at": 0.0}
 
 
-def _build_ssl() -> httpx.SSLConfig | bool:
-    """Return SSL context using Russian CA bundle if present, else system CAs."""
-    if CERT_BUNDLE.exists():
-        log.info("Using Russian CA bundle: %s", CERT_BUNDLE)
+def _validate_cert_bundle() -> dict[str, object]:
+    """
+    Validate the PEM bundle with Python's ssl module.
+    Returns a dict with keys: present, valid, cert_count, error, first_100_chars_safe.
+    """
+    result: dict[str, object] = {
+        "present": False,
+        "valid": False,
+        "cert_count": 0,
+        "error": None,
+        "first_100_chars_safe": None,
+    }
+    if not CERT_BUNDLE.exists():
+        result["error"] = f"File not found: {CERT_BUNDLE}"
+        return result
+
+    result["present"] = True
+
+    try:
+        text = CERT_BUNDLE.read_text(errors="replace")
+        result["cert_count"] = text.count("BEGIN CERTIFICATE")
+        # Safe preview: first 100 printable ASCII chars
+        safe = "".join(c if 32 <= ord(c) < 127 else "?" for c in text[:100])
+        result["first_100_chars_safe"] = safe
+    except Exception as exc:
+        result["error"] = f"Read error: {exc}"
+        return result
+
+    # Python ssl hard-validates the PEM structure
+    import ssl as _ssl
+    ctx = _ssl.create_default_context()
+    try:
+        ctx.load_verify_locations(str(CERT_BUNDLE))
+        result["valid"] = True
+    except Exception as exc:
+        result["error"] = f"ssl.load_verify_locations failed: {exc}"
+
+    return result
+
+
+def _build_ssl() -> str | bool:
+    """Return SSL context using Russian CA bundle if present and valid, else system CAs."""
+    v = _validate_cert_bundle()
+    if v["valid"]:
+        log.info("Using Russian CA bundle: %s (%d certs)", CERT_BUNDLE, v["cert_count"])
         return str(CERT_BUNDLE)
-    log.warning(
-        "Russian CA bundle NOT found at %s — falling back to system CAs. "
-        "TLS to GigaChat may fail.",
-        CERT_BUNDLE,
-    )
+    if v["present"]:
+        log.error(
+            "Russian CA bundle EXISTS but is INVALID: %s — falling back to system CAs. "
+            "First 100 chars: %r",
+            v["error"], v["first_100_chars_safe"],
+        )
+    else:
+        log.warning("Russian CA bundle NOT found — falling back to system CAs.")
     return True  # system CAs — TLS still enforced, never disabled
 
 
 def _auth_header() -> str:
-    raw_key = os.environ.get("GIGACHAT_AUTH_KEY", "")
+    raw_key = os.environ.get("GIGACHAT_AUTH_KEY", "").strip()
     if not raw_key:
         raise RuntimeError("GIGACHAT_AUTH_KEY is not set")
     encoded = base64.b64encode(raw_key.encode()).decode()
@@ -105,18 +149,38 @@ async def _get_access_token() -> str:
 # ── App lifecycle ──────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if CERT_BUNDLE.exists():
-        size = CERT_BUNDLE.stat().st_size
-        log.info("Cert bundle found: %s (%d bytes)", CERT_BUNDLE, size)
-        # Count how many certs are in the bundle
-        text = CERT_BUNDLE.read_text(errors="replace")
-        count = text.count("BEGIN CERTIFICATE")
-        log.info("Cert bundle contains %d certificate(s)", count)
-        if count < 2:
-            log.warning("Expected >=2 certs in bundle, found %d — TLS may fail", count)
+    # ── Env-var diagnostics (no secret values printed) ──
+    raw_key = os.environ.get("GIGACHAT_AUTH_KEY", "")
+    raw_scope = os.environ.get("GIGACHAT_SCOPE", "")
+    log.info("ENV CHECK: GIGACHAT_AUTH_KEY present=%s len=%d", bool(raw_key), len(raw_key))
+    log.info("ENV CHECK: GIGACHAT_SCOPE    present=%s value=%r", bool(raw_scope), raw_scope or "(empty)")
+
+    # Detect hidden whitespace / non-printable chars
+    if raw_key:
+        stripped = raw_key.strip()
+        if stripped != raw_key:
+            log.warning("ENV WARNING: GIGACHAT_AUTH_KEY has leading/trailing whitespace! "
+                        "Stripped len=%d vs raw len=%d", len(stripped), len(raw_key))
+        log.info("ENV CHECK: key_prefix=%s key_suffix=%s", raw_key[:4], raw_key[-4:])
+    else:
+        # List env var names present (not values) to help debug
+        known_keys = [k for k in os.environ if "GIGA" in k.upper() or "AUTH" in k.upper()]
+        log.warning("ENV CHECK: GIGACHAT_AUTH_KEY not found. Env vars containing GIGA/AUTH: %s", known_keys)
+        all_keys = sorted(os.environ.keys())
+        log.info("ENV CHECK: All env var names: %s", all_keys)
+
+    # ── Cert bundle check ──
+    cv = _validate_cert_bundle()
+    if cv["valid"]:
+        log.info("Cert bundle: VALID — %d cert(s), %d bytes", cv["cert_count"], CERT_BUNDLE.stat().st_size)
+    elif cv["present"]:
+        log.error(
+            "Cert bundle EXISTS but INVALID: %s | first_100=%r",
+            cv["error"], cv["first_100_chars_safe"],
+        )
     else:
         log.warning(
-            "Cert bundle NOT found at %s — falling back to system CAs. "
+            "Cert bundle NOT found at %s — GigaChat TLS will fail. "
             "Run certs/download_certs.sh to build it.",
             CERT_BUNDLE,
         )
@@ -174,15 +238,63 @@ async def test_gigachat():
     """
     result: dict[str, object] = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "cert_bundle_present": CERT_BUNDLE.exists(),
     }
 
+    # ── 1. Cert bundle diagnostics ──
+    cv = _validate_cert_bundle()
+    result["cert_bundle_present"] = cv["present"]
+    result["cert_bundle_valid"]   = cv["valid"]
+    result["cert_count"]          = cv["cert_count"]
+    result["first_100_chars_safe"] = cv["first_100_chars_safe"]
+    if cv["error"]:
+        result["cert_bundle_error"] = cv["error"]
+
+    # Extract subject names from certs for extra visibility
+    if cv["valid"]:
+        try:
+            from cryptography import x509 as _x509
+            text = CERT_BUNDLE.read_text(errors="replace")
+            subjects = []
+            for chunk in text.split("-----BEGIN CERTIFICATE-----"):
+                pem_block = "-----BEGIN CERTIFICATE-----" + chunk.split("-----END CERTIFICATE-----")[0] + "-----END CERTIFICATE-----"
+                if "BEGIN" not in pem_block:
+                    continue
+                try:
+                    cert = _x509.load_pem_x509_certificate(pem_block.encode())
+                    subjects.append(cert.subject.rfc4514_string())
+                except Exception:
+                    pass
+            result["cert_subjects"] = subjects
+        except ImportError:
+            result["cert_subjects"] = ["(cryptography package not installed)"]
+
+    # ── 2. Auth key diagnostics ──
     raw_key = os.environ.get("GIGACHAT_AUTH_KEY", "")
     result["has_auth_key"] = bool(raw_key)
+    result["key_raw_len"] = len(raw_key)
     if raw_key:
-        result["key_hint"] = raw_key[:6] + "..." + raw_key[-4:]
+        stripped = raw_key.strip()
+        result["key_has_whitespace"] = (stripped != raw_key)
+        result["key_stripped_len"] = len(stripped)
+        result["key_hint"] = raw_key[:4] + "..." + raw_key[-4:]
+    else:
+        result["env_keys_with_giga"] = [k for k in os.environ if "GIGA" in k.upper()]
+        result["env_keys_with_auth"] = [k for k in os.environ if "AUTH" in k.upper()]
 
-    # — OAuth —
+    scope_val = os.environ.get("GIGACHAT_SCOPE", "")
+    result["has_scope"] = bool(scope_val)
+    result["scope_value"] = scope_val or "(not set)"
+
+    # ── 3. Gate OAuth behind cert bundle validation ──
+    if not cv["valid"]:
+        result["oauth_ok"] = False
+        result["oauth_error"] = (
+            f"Cert bundle is not valid — refusing OAuth to protect TLS integrity. "
+            f"cert_bundle_error={cv.get('error', 'unknown')}"
+        )
+        return JSONResponse(content=result)
+
+    # ── 4. OAuth ──
     try:
         token = await _get_access_token()
         result["oauth_ok"] = True
