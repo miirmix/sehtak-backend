@@ -13,7 +13,7 @@ struct RootTabView: View {
                 .tabItem { Label(L.appointments, systemImage: "calendar") }
                 .tag(1)
 
-            AssistantPlaceholderView()
+            AssistantView()
                 .tabItem { Label(L.assistant, systemImage: "sparkles") }
                 .tag(2)
 
