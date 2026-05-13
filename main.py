@@ -1,5 +1,5 @@
 """
-GigaChat Proxy — FastAPI backend
+GigaChat Proxy -- FastAPI backend
 Routes: /health  /test  /ai/chat
 Secrets: GIGACHAT_AUTH_KEY, GIGACHAT_SCOPE (env vars only, never in code)
 TLS: Russian Trusted Root CA + Sub CA bundle (certs/russian_ca_bundle.pem)
@@ -7,10 +7,11 @@ TLS: Russian Trusted Root CA + Sub CA bundle (certs/russian_ca_bundle.pem)
 
 from __future__ import annotations
 
-import base64
 import logging
 import os
+import re
 import time
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,26 +22,28 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-# ── Logging ────────────────────────────────────────────────────────────────────
+# -- Logging -------------------------------------------------------------------
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
 log = logging.getLogger("gigachat-proxy")
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
+# -- Paths ---------------------------------------------------------------------
 BASE_DIR = Path(__file__).parent
 CERT_BUNDLE = BASE_DIR / "certs" / "russian_ca_bundle.pem"
 
-# ── GigaChat endpoints ─────────────────────────────────────────────────────────
+# -- GigaChat endpoints --------------------------------------------------------
 OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
 CHAT_URL  = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
 
-# ── Token cache ────────────────────────────────────────────────────────────────
+# -- Token cache ---------------------------------------------------------------
 _token_cache: dict[str, object] = {"access_token": None, "expires_at": 0.0}
 
+
+# -- Cert validation -----------------------------------------------------------
 
 def _validate_cert_bundle() -> dict[str, object]:
     """
     Validate the PEM bundle with Python's ssl module.
-    Returns a dict with keys: present, valid, cert_count, error, first_100_chars_safe.
+    Returns: {present, valid, cert_count, error, first_100_chars_safe}
     """
     result: dict[str, object] = {
         "present": False,
@@ -58,14 +61,12 @@ def _validate_cert_bundle() -> dict[str, object]:
     try:
         text = CERT_BUNDLE.read_text(errors="replace")
         result["cert_count"] = text.count("BEGIN CERTIFICATE")
-        # Safe preview: first 100 printable ASCII chars
         safe = "".join(c if 32 <= ord(c) < 127 else "?" for c in text[:100])
         result["first_100_chars_safe"] = safe
     except Exception as exc:
         result["error"] = f"Read error: {exc}"
         return result
 
-    # Python ssl hard-validates the PEM structure
     import ssl as _ssl
     ctx = _ssl.create_default_context()
     try:
@@ -78,29 +79,60 @@ def _validate_cert_bundle() -> dict[str, object]:
 
 
 def _build_ssl() -> str | bool:
-    """Return SSL context using Russian CA bundle if present and valid, else system CAs."""
+    """Return SSL verify arg: CA bundle path if valid, else True (system CAs)."""
     v = _validate_cert_bundle()
     if v["valid"]:
         log.info("Using Russian CA bundle: %s (%d certs)", CERT_BUNDLE, v["cert_count"])
         return str(CERT_BUNDLE)
     if v["present"]:
         log.error(
-            "Russian CA bundle EXISTS but is INVALID: %s — falling back to system CAs. "
-            "First 100 chars: %r",
+            "Russian CA bundle EXISTS but INVALID: %s -- falling back to system CAs. First 100: %r",
             v["error"], v["first_100_chars_safe"],
         )
     else:
-        log.warning("Russian CA bundle NOT found — falling back to system CAs.")
-    return True  # system CAs — TLS still enforced, never disabled
+        log.warning("Russian CA bundle NOT found -- falling back to system CAs.")
+    return True  # system CAs; TLS still enforced, never disabled
 
 
-def _auth_header() -> str:
+# -- Auth header ---------------------------------------------------------------
+
+# Pre-compile base64 pattern (avoids $ in inline regex strings that confuse tools)
+_B64_RE = re.compile(r"^[A-Za-z0-9+/]+=*$")
+
+
+def _auth_header() -> tuple[str, dict[str, object]]:
+    """
+    Return (Authorization header value, diagnostics dict).
+
+    The GIGACHAT_AUTH_KEY obtained from Sberbank Studio is already a
+    Base64-encoded credential (base64(clientID:clientSecret)).
+    Use it DIRECTLY in 'Authorization: Basic <key>' -- do NOT re-encode.
+    Strip any accidental 'Basic ' prefix that may be in the env var.
+    """
     raw_key = os.environ.get("GIGACHAT_AUTH_KEY", "").strip()
     if not raw_key:
         raise RuntimeError("GIGACHAT_AUTH_KEY is not set")
-    encoded = base64.b64encode(raw_key.encode()).decode()
-    return f"Basic {encoded}"
 
+    key_value = raw_key
+    had_prefix = False
+    if key_value.lower().startswith("basic "):
+        key_value = key_value[6:].strip()
+        had_prefix = True
+
+    is_base64 = bool(_B64_RE.match(key_value)) and len(key_value) % 4 == 0
+
+    diag: dict[str, object] = {
+        "auth_header_prefix": "Basic",
+        "auth_key_len": len(key_value),
+        "auth_key_looks_base64": is_base64,
+        "had_basic_prefix_in_env": had_prefix,
+        "key_hint": (key_value[:6] + "..." + key_value[-4:]) if len(key_value) > 10 else "***",
+    }
+
+    return f"Basic {key_value}", diag
+
+
+# -- Token fetch ---------------------------------------------------------------
 
 async def _get_access_token() -> str:
     now = time.time()
@@ -108,15 +140,26 @@ async def _get_access_token() -> str:
         return str(_token_cache["access_token"])
 
     scope = os.environ.get("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
-    import uuid
     rquid = str(uuid.uuid4())
+
+    auth_header, auth_diag = _auth_header()
+
+    log.info(
+        "OAuth request: url=%s scope=%s rquid=%s "
+        "auth_key_len=%d auth_key_looks_base64=%s had_basic_prefix=%s key_hint=%s",
+        OAUTH_URL, scope, rquid,
+        auth_diag["auth_key_len"],
+        auth_diag["auth_key_looks_base64"],
+        auth_diag["had_basic_prefix_in_env"],
+        auth_diag["key_hint"],
+    )
 
     ssl_ctx = _build_ssl()
     async with httpx.AsyncClient(verify=ssl_ctx, timeout=20.0) as client:
         resp = await client.post(
             OAUTH_URL,
             headers={
-                "Authorization": _auth_header(),
+                "Authorization": auth_header,
                 "RqUID": rquid,
                 "Content-Type": "application/x-www-form-urlencoded",
                 "Accept": "application/json",
@@ -124,11 +167,28 @@ async def _get_access_token() -> str:
             data={"scope": scope},
         )
 
+    log.info("OAuth response: status=%d", resp.status_code)
+
     if resp.status_code != 200:
-        log.error("OAuth failed: status=%d body=%s", resp.status_code, resp.text[:300])
+        safe_body = resp.text[:500]
+        log.error(
+            "OAuth FAILED: status=%d scope=%s auth_key_len=%d auth_key_looks_base64=%s response_body=%s",
+            resp.status_code, scope,
+            auth_diag["auth_key_len"],
+            auth_diag["auth_key_looks_base64"],
+            safe_body,
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"GigaChat OAuth failed ({resp.status_code})",
+            detail={
+                "error": "GigaChat OAuth failed",
+                "oauth_status": resp.status_code,
+                "oauth_response_body": safe_body,
+                "auth_key_len": auth_diag["auth_key_len"],
+                "auth_key_looks_base64": auth_diag["auth_key_looks_base64"],
+                "scope": scope,
+                "rq_uid_is_uuid": True,
+            },
         )
 
     data = resp.json()
@@ -146,66 +206,60 @@ async def _get_access_token() -> str:
     return token
 
 
-# ── App lifecycle ──────────────────────────────────────────────────────────────
+# -- App lifecycle -------------------------------------------------------------
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ── Env-var diagnostics (no secret values printed) ──
     raw_key = os.environ.get("GIGACHAT_AUTH_KEY", "")
     raw_scope = os.environ.get("GIGACHAT_SCOPE", "")
     log.info("ENV CHECK: GIGACHAT_AUTH_KEY present=%s len=%d", bool(raw_key), len(raw_key))
     log.info("ENV CHECK: GIGACHAT_SCOPE    present=%s value=%r", bool(raw_scope), raw_scope or "(empty)")
 
-    # Detect hidden whitespace / non-printable chars
     if raw_key:
         stripped = raw_key.strip()
         if stripped != raw_key:
-            log.warning("ENV WARNING: GIGACHAT_AUTH_KEY has leading/trailing whitespace! "
-                        "Stripped len=%d vs raw len=%d", len(stripped), len(raw_key))
+            log.warning(
+                "ENV WARNING: GIGACHAT_AUTH_KEY has leading/trailing whitespace! "
+                "Stripped len=%d vs raw len=%d", len(stripped), len(raw_key)
+            )
         log.info("ENV CHECK: key_prefix=%s key_suffix=%s", raw_key[:4], raw_key[-4:])
     else:
-        # List env var names present (not values) to help debug
-        known_keys = [k for k in os.environ if "GIGA" in k.upper() or "AUTH" in k.upper()]
-        log.warning("ENV CHECK: GIGACHAT_AUTH_KEY not found. Env vars containing GIGA/AUTH: %s", known_keys)
-        all_keys = sorted(os.environ.keys())
-        log.info("ENV CHECK: All env var names: %s", all_keys)
+        known = [k for k in os.environ if "GIGA" in k.upper() or "AUTH" in k.upper()]
+        log.warning("ENV CHECK: GIGACHAT_AUTH_KEY not found. Related keys: %s", known)
+        log.info("ENV CHECK: All env var names: %s", sorted(os.environ.keys()))
 
-    # ── Cert bundle check ──
     cv = _validate_cert_bundle()
     if cv["valid"]:
-        log.info("Cert bundle: VALID — %d cert(s), %d bytes", cv["cert_count"], CERT_BUNDLE.stat().st_size)
+        log.info("Cert bundle: VALID -- %d cert(s), %d bytes", cv["cert_count"], CERT_BUNDLE.stat().st_size)
     elif cv["present"]:
-        log.error(
-            "Cert bundle EXISTS but INVALID: %s | first_100=%r",
-            cv["error"], cv["first_100_chars_safe"],
-        )
+        log.error("Cert bundle EXISTS but INVALID: %s | first_100=%r", cv["error"], cv["first_100_chars_safe"])
     else:
-        log.warning(
-            "Cert bundle NOT found at %s — GigaChat TLS will fail. "
-            "Run certs/download_certs.sh to build it.",
-            CERT_BUNDLE,
-        )
+        log.warning("Cert bundle NOT found at %s -- GigaChat TLS will fail.", CERT_BUNDLE)
+
     yield
     log.info("GigaChat proxy shutting down.")
 
 
-# ── FastAPI app ────────────────────────────────────────────────────────────────
+# -- FastAPI app ---------------------------------------------------------------
+
 app = FastAPI(
     title="GigaChat Proxy",
     version="1.0.0",
-    docs_url=None,   # disable Swagger UI in production
+    docs_url=None,
     redoc_url=None,
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # mobile app — no browser origin needed
+    allow_origins=["*"],
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
 
-# ── Request / Response models ──────────────────────────────────────────────────
+# -- Models --------------------------------------------------------------------
+
 class ChatMessage(BaseModel):
     role: str
     content: str
@@ -218,7 +272,7 @@ class ChatRequest(BaseModel):
     max_tokens: int = Field(default=1024, ge=1, le=4096)
 
 
-# ── Routes ─────────────────────────────────────────────────────────────────────
+# -- Routes --------------------------------------------------------------------
 
 @app.get("/health")
 async def health():
@@ -232,33 +286,25 @@ async def health():
 
 @app.get("/test")
 async def test_gigachat():
-    """
-    Diagnostic: tests OAuth + a one-sentence chat ping.
-    Safe to call from the iOS debug tool.
-    """
-    result: dict[str, object] = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+    """Diagnostic: tests cert bundle, OAuth, and a one-sentence chat ping."""
+    result: dict[str, object] = {"timestamp": datetime.now(timezone.utc).isoformat()}
 
-    # ── 1. Cert bundle diagnostics ──
+    # 1. Cert bundle
     cv = _validate_cert_bundle()
     result["cert_bundle_present"] = cv["present"]
-    result["cert_bundle_valid"]   = cv["valid"]
-    result["cert_count"]          = cv["cert_count"]
+    result["cert_bundle_valid"] = cv["valid"]
+    result["cert_count"] = cv["cert_count"]
     result["first_100_chars_safe"] = cv["first_100_chars_safe"]
     if cv["error"]:
         result["cert_bundle_error"] = cv["error"]
 
-    # Extract subject names from certs for extra visibility
     if cv["valid"]:
         try:
             from cryptography import x509 as _x509
             text = CERT_BUNDLE.read_text(errors="replace")
             subjects = []
-            for chunk in text.split("-----BEGIN CERTIFICATE-----"):
+            for chunk in text.split("-----BEGIN CERTIFICATE-----")[1:]:
                 pem_block = "-----BEGIN CERTIFICATE-----" + chunk.split("-----END CERTIFICATE-----")[0] + "-----END CERTIFICATE-----"
-                if "BEGIN" not in pem_block:
-                    continue
                 try:
                     cert = _x509.load_pem_x509_certificate(pem_block.encode())
                     subjects.append(cert.subject.rfc4514_string())
@@ -268,13 +314,13 @@ async def test_gigachat():
         except ImportError:
             result["cert_subjects"] = ["(cryptography package not installed)"]
 
-    # ── 2. Auth key diagnostics ──
+    # 2. Auth key diagnostics
     raw_key = os.environ.get("GIGACHAT_AUTH_KEY", "")
     result["has_auth_key"] = bool(raw_key)
     result["key_raw_len"] = len(raw_key)
     if raw_key:
         stripped = raw_key.strip()
-        result["key_has_whitespace"] = (stripped != raw_key)
+        result["key_has_whitespace"] = stripped != raw_key
         result["key_stripped_len"] = len(stripped)
         result["key_hint"] = raw_key[:4] + "..." + raw_key[-4:]
     else:
@@ -285,26 +331,40 @@ async def test_gigachat():
     result["has_scope"] = bool(scope_val)
     result["scope_value"] = scope_val or "(not set)"
 
-    # ── 3. Gate OAuth behind cert bundle validation ──
+    # 3. Gate OAuth behind cert validation
     if not cv["valid"]:
         result["oauth_ok"] = False
         result["oauth_error"] = (
-            f"Cert bundle is not valid — refusing OAuth to protect TLS integrity. "
+            "Cert bundle is not valid -- refusing OAuth to protect TLS integrity. "
             f"cert_bundle_error={cv.get('error', 'unknown')}"
         )
         return JSONResponse(content=result)
 
-    # ── 4. OAuth ──
+    # 4. OAuth
     try:
         token = await _get_access_token()
         result["oauth_ok"] = True
         result["token_length"] = len(token)
+    except HTTPException as exc:
+        result["oauth_ok"] = False
+        detail = exc.detail
+        if isinstance(detail, dict):
+            result["oauth_error"] = detail.get("error", "unknown")
+            result["oauth_status"] = detail.get("oauth_status")
+            result["oauth_response_body"] = detail.get("oauth_response_body")
+            result["auth_key_len"] = detail.get("auth_key_len")
+            result["auth_key_looks_base64"] = detail.get("auth_key_looks_base64")
+            result["scope_used"] = detail.get("scope")
+            result["rq_uid_is_uuid"] = detail.get("rq_uid_is_uuid")
+        else:
+            result["oauth_error"] = str(detail)
+        return JSONResponse(content=result)
     except Exception as exc:
         result["oauth_ok"] = False
         result["oauth_error"] = str(exc)
         return JSONResponse(content=result)
 
-    # — Chat ping —
+    # 5. Chat ping
     try:
         ssl_ctx = _build_ssl()
         async with httpx.AsyncClient(verify=ssl_ctx, timeout=30.0) as client:
@@ -339,10 +399,9 @@ async def test_gigachat():
 @app.post("/ai/chat")
 async def ai_chat(body: ChatRequest, request: Request):
     """
-    Main proxy endpoint — called by the iOS app.
+    Main proxy endpoint -- called by the iOS app.
     Requires no secrets in the mobile app; GIGACHAT_AUTH_KEY lives only here.
     """
-    # Lightweight rate-limit hint (real limiting should be at reverse-proxy / Railway)
     if len(body.messages) > 50:
         raise HTTPException(status_code=400, detail="Too many messages")
 
