@@ -30,7 +30,15 @@ struct AssistantView: View {
                 DoctorProfileView(doctor: doc)
             }
         }
-        .onAppear { if messages.isEmpty { resetChat() } }
+        .onAppear {
+            if messages.isEmpty { resetChat() }
+            // Fire diagnostic once to surface GigaChat config issues in logs
+            Task {
+                if let provider = aiProvider as? GigaChatProvider {
+                    await provider.runDiagnostic()
+                }
+            }
+        }
         .onChange(of: appState.language) { _, _ in resetChat() }
         .onChange(of: selectedItem) { _, item in handlePhotoSelection(item) }
     }

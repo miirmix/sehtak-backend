@@ -6,6 +6,25 @@ import SwiftUI
 
 final class GigaChatProvider: AIProviderProtocol {
 
+    // MARK: Startup Diagnostic
+    /// Fires once to surface OAuth/config errors in logs without a real user query.
+    func runDiagnostic() async {
+        let body: [String: Any] = ["action": "diagnostic"]
+        NSLog("[GigaChat] === Running diagnostic ===")
+        do {
+            let result = try await callProxy(body: body)
+            NSLog("[GigaChat] diagnostic result: provider=%@ hasAuthKey=%@ scope=%@ oauthStatus=%@ errorCode=%@ chatStatus=%@",
+                  result["provider"] as? String ?? "?",
+                  "\(result["hasAuthKey"] ?? "?")",
+                  result["scope"] as? String ?? "?",
+                  result["oauthStatus"] as? String ?? "?",
+                  result["errorCode"] as? CVarArg ?? "nil" as CVarArg,
+                  "\(result["chatStatus"] ?? "?")")
+        } catch {
+            NSLog("[GigaChat] diagnostic callProxy error: %@", error.localizedDescription)
+        }
+    }
+
     // MARK: Text Query
     func generateMedicalResponse(query: String, language: AppLanguage) async -> AIResponse {
         // Emergency check runs locally first — no network round-trip for safety
@@ -24,7 +43,12 @@ final class GigaChatProvider: AIProviderProtocol {
             "query": query,
             "language": language.rawValue
         ]
-        guard let dto = try? await callProxy(body: body) else {
+        NSLog("[GigaChat] generateMedicalResponse calling proxy, lang=%@", language.rawValue)
+        let dto: [String: Any]
+        do {
+            dto = try await callProxy(body: body)
+        } catch {
+            NSLog("[GigaChat] callProxy threw: %@", error.localizedDescription)
             return fallbackResponse(language: language)
         }
 
@@ -121,22 +145,53 @@ final class GigaChatProvider: AIProviderProtocol {
     // MARK: - Private Helpers
 
     private func callProxy(body: [String: Any]) async throws -> [String: Any] {
-        guard let url = URL(string: SupabaseConfig.aiProxyURL) else { throw URLError(.badURL) }
+        let urlString = SupabaseConfig.aiProxyURL
+        NSLog("[GigaChat] callProxy → url=%@", urlString)
+        guard let url = URL(string: urlString) else {
+            NSLog("[GigaChat] ERROR: bad URL")
+            throw URLError(.badURL)
+        }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(SupabaseConfig.anonKey)", forHTTPHeaderField: "Authorization")
         request.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
         request.timeoutInterval = 30
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let bodyData = try JSONSerialization.data(withJSONObject: body)
+        request.httpBody = bodyData
+        NSLog("[GigaChat] request body size=%d bytes", bodyData.count)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            NSLog("[GigaChat] URLSession error: %@", error.localizedDescription)
+            throw error
+        }
+
+        guard let http = response as? HTTPURLResponse else {
+            NSLog("[GigaChat] ERROR: non-HTTP response")
             throw URLError(.badServerResponse)
         }
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        guard let json else { throw URLError(.cannotParseResponse) }
-        if json["error"] != nil { throw URLError(.badServerResponse) }
+        NSLog("[GigaChat] HTTP status=%d, data size=%d bytes", http.statusCode, data.count)
+
+        // Log raw response (first 500 chars) for debugging
+        if let raw = String(data: data, encoding: .utf8) {
+            let preview = String(raw.prefix(500))
+            NSLog("[GigaChat] raw response: %@", preview)
+        }
+
+        guard (200...299).contains(http.statusCode) else {
+            NSLog("[GigaChat] ERROR: non-2xx status %d", http.statusCode)
+            throw URLError(.badServerResponse)
+        }
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            NSLog("[GigaChat] ERROR: could not parse JSON")
+            throw URLError(.cannotParseResponse)
+        }
+        // Note: do NOT throw on "error" key — v6 edge function returns structured errors
+        // as valid 200 JSON with responseText so the app can show a meaningful message.
+        NSLog("[GigaChat] success, keys=%@", json.keys.joined(separator: ","))
         return json
     }
 
