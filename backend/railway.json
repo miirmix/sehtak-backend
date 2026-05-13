@@ -2,7 +2,7 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "pip install -r requirements.txt && bash certs/download_certs.sh"
+    "buildCommand": "pip install -r requirements.txt && chmod +x certs/download_certs.sh && bash certs/download_certs.sh"
   },
   "deploy": {
     "startCommand": "uvicorn main:app --host 0.0.0.0 --port $PORT",

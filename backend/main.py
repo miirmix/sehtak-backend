@@ -105,7 +105,21 @@ async def _get_access_token() -> str:
 # ── App lifecycle ──────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    log.info("GigaChat proxy starting. Cert bundle present: %s", CERT_BUNDLE.exists())
+    if CERT_BUNDLE.exists():
+        size = CERT_BUNDLE.stat().st_size
+        log.info("Cert bundle found: %s (%d bytes)", CERT_BUNDLE, size)
+        # Count how many certs are in the bundle
+        text = CERT_BUNDLE.read_text(errors="replace")
+        count = text.count("BEGIN CERTIFICATE")
+        log.info("Cert bundle contains %d certificate(s)", count)
+        if count < 2:
+            log.warning("Expected >=2 certs in bundle, found %d — TLS may fail", count)
+    else:
+        log.warning(
+            "Cert bundle NOT found at %s — falling back to system CAs. "
+            "Run certs/download_certs.sh to build it.",
+            CERT_BUNDLE,
+        )
     yield
     log.info("GigaChat proxy shutting down.")
 
