@@ -7,6 +7,7 @@ TLS: Russian Trusted Root CA + Sub CA bundle (certs/russian_ca_bundle.pem)
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -19,7 +20,7 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 # -- Logging -------------------------------------------------------------------
@@ -258,6 +259,18 @@ app.add_middleware(
 )
 
 
+# -- JSON helper ---------------------------------------------------------------
+
+def _json_response(data: dict, status_code: int = 200) -> Response:
+    """Return a UTF-8 JSON response with ensure_ascii=False (preserves Cyrillic/Arabic)."""
+    body = json.dumps(data, ensure_ascii=False)
+    return Response(
+        content=body,
+        status_code=status_code,
+        media_type="application/json; charset=utf-8",
+    )
+
+
 # -- Models --------------------------------------------------------------------
 
 class ChatMessage(BaseModel):
@@ -338,7 +351,7 @@ async def test_gigachat():
             "Cert bundle is not valid -- refusing OAuth to protect TLS integrity. "
             f"cert_bundle_error={cv.get('error', 'unknown')}"
         )
-        return JSONResponse(content=result)
+        return _json_response(result)
 
     # 4. OAuth
     try:
@@ -358,11 +371,11 @@ async def test_gigachat():
             result["rq_uid_is_uuid"] = detail.get("rq_uid_is_uuid")
         else:
             result["oauth_error"] = str(detail)
-        return JSONResponse(content=result)
+        return _json_response(result)
     except Exception as exc:
         result["oauth_ok"] = False
         result["oauth_error"] = str(exc)
-        return JSONResponse(content=result)
+        return _json_response(result)
 
     # 5. Chat ping
     try:
@@ -384,16 +397,16 @@ async def test_gigachat():
         result["chat_status"] = resp.status_code
         result["chat_ok"] = resp.status_code == 200
         if resp.status_code == 200:
-            data = resp.json()
+            data = json.loads(resp.content.decode("utf-8"))
             reply = data.get("choices", [{}])[0].get("message", {}).get("content", "")
             result["chat_reply_preview"] = reply[:120]
         else:
-            result["chat_error"] = resp.text[:300]
+            result["chat_error"] = resp.content.decode("utf-8", errors="replace")[:300]
     except Exception as exc:
         result["chat_ok"] = False
         result["chat_error"] = str(exc)
 
-    return JSONResponse(content=result)
+    return _json_response(result)
 
 
 @app.post("/ai/chat")
@@ -431,4 +444,6 @@ async def ai_chat(body: ChatRequest, request: Request):
             detail=f"GigaChat error ({resp.status_code})",
         )
 
-    return resp.json()
+    data = resp.content.decode("utf-8")
+    parsed = json.loads(data)
+    return _json_response(parsed)
