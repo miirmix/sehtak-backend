@@ -44,12 +44,14 @@ struct RootTabView: View {
     }
 
     private func handleDrawerNavigation(_ dest: DrawerDestination?) {
+        guard let dest else { return }
         switch dest {
-        case .upcomingAppts, .pastAppts: selection = 1
-        case .medData, .labAnalysis:    selection = 3
-        case .searchDoctor, .doctorsDir: selection = 0
-        case .settings:                  selection = 4
-        case .ckdRisk, .loyalty, .invoices, .favDoctors, .none, nil: break
+        case .upcomingAppts, .pastAppts:  selection = 1
+        case .medData, .labAnalysis:      selection = 3
+        case .searchDoctor, .doctorsDir:  selection = 0
+        case .settings:                   selection = 4
+        case .ckdRisk, .loyalty, .invoices, .favDoctors:
+            break  // handled by sheets / pushed via home tab if needed
         }
         drawerDestination = nil
     }

@@ -24,7 +24,7 @@ enum RequestStatus: String, CaseIterable {
     }
 }
 
-struct PatientRequest: Identifiable {
+struct PatientRequest: Identifiable, Hashable {
     let id: UUID
     let patientNameAr: String
     let patientNameRu: String
@@ -43,6 +43,9 @@ struct PatientRequest: Identifiable {
     var displaySymptoms: String { Loc.lang == .arabic ? symptomsAr : symptomsRu }
     var displayNotes: String    { Loc.lang == .arabic ? medNotesAr : medNotesRu }
     var displayDate: String     { Loc.lang == .arabic ? requestedDateAr : requestedDateRu }
+
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+    static func == (lhs: PatientRequest, rhs: PatientRequest) -> Bool { lhs.id == rhs.id }
 }
 
 // MARK: - Sample Patient Requests

@@ -16,7 +16,7 @@ struct DrawerItem: Identifiable {
 enum DrawerDestination: Equatable {
     case upcomingAppts, pastAppts, favDoctors, medData
     case labAnalysis, ckdRisk, loyalty, invoices
-    case searchDoctor, doctorsDir, settings, none
+    case searchDoctor, doctorsDir, settings
 }
 
 // MARK: - Side Drawer
