@@ -3,11 +3,19 @@
 ## Architecture
 
 ```
-iPhone App  ──HTTPS──▶  FastAPI Proxy (Railway/Render)  ──HTTPS──▶  GigaChat API
-                              │                                    (Russian TLS)
-                         GIGACHAT_AUTH_KEY
-                         (env var, never in app)
+iPhone App  ──HTTPS──▶  FastAPI Proxy (Railway/Render)
+                              │
+              ┌───────────────┴────────────────┐
+              │                                │
+        POST /ai/chat                   POST /ai/analyze-image
+              │                                │
+              ▼                                ▼
+        GigaChat API                    OpenAI Responses API
+     (GIGACHAT_AUTH_KEY)            (OPENAI_API_KEY, OPENAI_VISION_MODEL)
 ```
+
+> Text chat uses GigaChat only. Image analysis uses OpenAI Vision on the backend.
+> API keys never ship in the iOS app.
 
 ---
 
@@ -48,12 +56,15 @@ git push
 ### 2. Set environment variables
 In the Railway dashboard → your service → **Variables**:
 
-| Variable           | Value                         |
-|--------------------|-------------------------------|
-| `GIGACHAT_AUTH_KEY`| Your Base64 key from GigaChat |
-| `GIGACHAT_SCOPE`   | `GIGACHAT_API_PERS`           |
+| Variable              | Value                         |
+|-----------------------|-------------------------------|
+| `GIGACHAT_AUTH_KEY`   | Your Base64 key from GigaChat |
+| `GIGACHAT_SCOPE`      | `GIGACHAT_API_PERS`           |
+| `OPENAI_API_KEY`      | Your OpenAI API key           |
+| `OPENAI_VISION_MODEL` | `gpt-4.1-mini` (optional)     |
 
-> ⚠️ **Never** put `GIGACHAT_AUTH_KEY` in source code or the iOS app.
+> ⚠️ **Never** put `GIGACHAT_AUTH_KEY` or `OPENAI_API_KEY` in source code or the iOS app.
+> `OPENAI_VISION_MODEL` defaults to `gpt-4.1-mini` when unset — change it in Railway if OpenAI model availability changes.
 
 ### 3. Get your public URL
 After deploy: **Settings → Domains** → copy `https://your-service.railway.app`
@@ -98,11 +109,12 @@ concept-pulse/AI/GigaChatConfig.swift
 
 ## Endpoints
 
-| Method | Path       | Description                                    |
-|--------|------------|------------------------------------------------|
-| GET    | `/health`  | Health check — Railway/Render uptime monitor   |
-| GET    | `/test`    | Diagnostic: OAuth + chat ping (debug tool)     |
-| POST   | `/ai/chat` | Main proxy — called by the iOS app             |
+| Method | Path                | Description                                    |
+|--------|---------------------|------------------------------------------------|
+| GET    | `/health`           | Health check — Railway/Render uptime monitor   |
+| GET    | `/test`             | Diagnostic: OAuth + chat ping (debug tool)     |
+| POST   | `/ai/chat`          | Text chat proxy (GigaChat) — iOS assistant     |
+| POST   | `/ai/analyze-image` | Medical image analysis (OpenAI Vision)         |
 
 ---
 
@@ -121,6 +133,8 @@ bash certs/download_certs.sh
 # Set env vars
 export GIGACHAT_AUTH_KEY="your_key_here"
 export GIGACHAT_SCOPE="GIGACHAT_API_PERS"
+export OPENAI_API_KEY="your_openai_key_here"
+export OPENAI_VISION_MODEL="gpt-4.1-mini"   # optional; defaults to gpt-4.1-mini
 
 # Run
 uvicorn main:app --reload --port 8080
@@ -128,13 +142,19 @@ uvicorn main:app --reload --port 8080
 # Test
 curl http://localhost:8080/health
 curl http://localhost:8080/test
+
+# Image analysis (multipart/form-data)
+curl -X POST http://localhost:8080/ai/analyze-image \
+  -F "language=ar" \
+  -F "image=@/path/to/image.jpg;type=image/jpeg"
 ```
 
 ---
 
 ## Security checklist
 
-- [x] `GIGACHAT_AUTH_KEY` is only in hosting env vars — never in source code
+- [x] `GIGACHAT_AUTH_KEY` and `OPENAI_API_KEY` are only in hosting env vars — never in source code
+- [x] `OPENAI_VISION_MODEL` is server-configurable (default `gpt-4.1-mini`)
 - [x] TLS verification is always enabled (`verify=True` / CA bundle path)
 - [x] `verify=False` is NOT used anywhere
 - [x] CA bundle is public data — safe to commit

@@ -1,7 +1,7 @@
 """
 GigaChat Proxy -- FastAPI backend
-Routes: /health  /test  /ai/chat
-Secrets: GIGACHAT_AUTH_KEY, GIGACHAT_SCOPE (env vars only, never in code)
+Routes: /health  /test  /ai/chat  /ai/analyze-image
+Secrets: GIGACHAT_AUTH_KEY, GIGACHAT_SCOPE, OPENAI_API_KEY, OPENAI_VISION_MODEL (env only)
 TLS: Russian Trusted Root CA + Sub CA bundle (certs/russian_ca_bundle.pem)
 """
 
@@ -18,10 +18,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
+
+from openai_vision import analyze_medical_image, vision_model_name
 
 # -- Logging -------------------------------------------------------------------
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
@@ -328,6 +330,8 @@ async def health():
         "status": "ok",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "cert_bundle": CERT_BUNDLE.exists(),
+        "openai_configured": bool(os.environ.get("OPENAI_API_KEY", "").strip()),
+        "openai_vision_model": vision_model_name(),
     }
 
 
@@ -487,3 +491,52 @@ async def ai_chat(body: ChatRequest, request: Request):
     data = resp.content.decode("utf-8")
     parsed = json.loads(data)
     return _json_response(parsed)
+
+
+@app.post("/ai/analyze-image")
+async def ai_analyze_image(
+    image: UploadFile = File(...),
+    language: str = Form(default="ar"),
+):
+    """
+    Medical image analysis via OpenAI Vision (Responses API).
+    Accepts multipart/form-data: image file + optional language (ar|ru).
+    OPENAI_API_KEY and OPENAI_VISION_MODEL must be set on the server.
+    """
+    if language not in ("ar", "ru"):
+        raise HTTPException(status_code=400, detail="language must be ar or ru")
+
+    if not os.environ.get("OPENAI_API_KEY", "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OPENAI_API_KEY is not configured on the server",
+        )
+
+    content_type = (image.content_type or "image/jpeg").lower()
+    if not content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Uploaded file must be an image")
+
+    raw = await image.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty image file")
+    if len(raw) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large (max 15 MB)")
+
+    try:
+        result = await analyze_medical_image(
+            raw, language=language, content_type=content_type
+        )
+    except RuntimeError as exc:
+        log.error("Vision analysis failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+    except (ValueError, json.JSONDecodeError) as exc:
+        log.error("Vision parse failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to parse vision model response",
+        ) from exc
+
+    return _json_response(result)
